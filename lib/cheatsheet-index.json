@@ -182,11 +182,81 @@
     "tldr": "- **llama.cpp** is a pure-C++ inference runtime (started by ggerganov, 2023). No PyTorch. No Python. ~50K lines of code; runs Llama-class models on every reasonable platform from a Raspberry Pi to a server GPU.\n- **GGUF** is the file format: weights + tokenizer + chat template + metadata in a single mmappable file. Quantized formats (Q4_K_M, Q5_K_M, Q8_0) are baked in. **The format is the standard for local LLMs in 2026** — every consumer-facing tool reads GGUF.\n- **mmap-first design**: the model file is `mmap()`'d, not read. The OS pages weights in on demand. **Cold-start to first token in seconds, not minutes**, even for a 70B model on disk.\n- **Backends compose**: a single binary runs the same model on CPU (AVX-512, NEON), Apple Metal, Vulkan, CUDA, ROCm. The framework dispatches per-tensor based on the available backend.\n- **K-quants** are the format's killer feature: better quality than naive INT4 at the same bit budget, baked into the binary, no calibration data needed. Q4_K_M is the universal default."
   },
   {
+    "slug": "/foundations/caches-and-architecture/branch-prediction",
+    "track": "foundations",
+    "module": "foundations/caches-and-architecture",
+    "title": "Branch Prediction",
+    "tldr": "- Modern CPUs are **deeply pipelined** — 15–20 instructions in flight simultaneously. When the CPU hits a branch (`if`, `for`, `while`), it doesn't *know* which path will execute, so it **guesses** and starts speculatively running.\n- If the guess is right: ~free, the speculation commits.\n- If the guess is wrong: pipeline gets flushed, ~10–20 cycles wasted. **A misprediction costs 5–10× a regular instruction.**\n- Modern predictors are **really good** — branches that follow patterns (always taken, predictable loops, simple conditions) hit ~99% accuracy.\n- Branches that depend on data with no pattern (sorting random values, hash lookups, RNG branches) hit ~50%. **A 1B-iteration loop with 50% mispredict can spend half its time in pipeline stalls.**"
+  },
+  {
+    "slug": "/foundations/caches-and-architecture/cache-lines",
+    "track": "foundations",
+    "module": "foundations/caches-and-architecture",
+    "title": "Cache Lines",
+    "tldr": "- A **cache line** is the unit of memory transfer between RAM and CPU caches: typically **64 bytes** on x86 / ARM, occasionally 128. **You never read 1 byte from RAM; you always read 64.**\n- Sequential access uses every byte of each cache line you fetch → bandwidth-efficient. Strided access wastes 87% of the bandwidth (using 8 bytes of every 64-byte fetch).\n- L1 (32–64 KB), L2 (256 KB – 2 MB), L3 (32 MB – 100+ MB), DRAM (TB) — each level is ~5–10× slower and ~10× larger than the one above. **Knowing this hierarchy is the entire CPU performance story.**\n- **Cache-friendly = arrays > pointer chasing**. Linked lists, hash tables with chaining, tree traversal all suffer from cache misses; flat arrays and contiguous structs win on modern hardware.\n- ML systems engineering applies the same idea on GPU: HBM cache lines are 32–128 bytes; the same locality discipline that wins on CPU wins on GPU coalescing."
+  },
+  {
+    "slug": "/foundations/caches-and-architecture/numa-and-topology",
+    "track": "foundations",
+    "module": "foundations/caches-and-architecture",
+    "title": "NUMA & Topology",
+    "tldr": "- A modern server is **multiple sockets** (CPUs), each with its own memory controller. Memory attached to one socket is **local** to it; memory on the other socket is **remote** — accessing it costs ~2× more latency and ~50% bandwidth.\n- This is **NUMA** (Non-Uniform Memory Access). Linux exposes it via `/sys/devices/system/node/`. Tools: `numactl`, `lstopo`, `numastat`. **Pinning processes to NUMA nodes can be a 1.5–3× win on memory-bound workloads.**\n- The same idea scales to GPUs: a multi-GPU node has a topology (NVLink mesh, NVSwitch, PCIe). GPU 0 and GPU 1 might be 600 GB/s apart (NVLink); GPU 0 and GPU 7 might be 200 GB/s (one NVSwitch hop).\n- Across nodes, **InfiniBand / Ethernet RDMA** add another tier: 25–400 Gb/s between nodes. The topology of a frontier training cluster matters as much as raw GPU count.\n- **CXL** (Compute Express Link, 2019+) is the emerging fabric for cache-coherent shared memory across CPUs and accelerators. Production rollout 2024–2026; reshaping how multi-host AI systems are built."
+  },
+  {
+    "slug": "/foundations/caches-and-architecture/profiling",
+    "track": "foundations",
+    "module": "foundations/caches-and-architecture",
+    "title": "Profiling Tools",
+    "tldr": "- **You can't optimize what you can't measure.** Profiling is the discipline of turning \"this is slow\" into \"this specific thing is using N% of cycles for reason X.\"\n- **CPU profilers**: `perf` (Linux), `Instruments` (macOS), VTune (Intel). Sample-based — interrupt periodically, record the call stack, aggregate.\n- **GPU profilers**: NVIDIA Nsight Systems (`nsys`) for whole-program timeline; Nsight Compute (`ncu`) for per-kernel deep dive. AMD has rocm-smi + rocprof.\n- **eBPF tools** — bpftrace, BCC, Pixie — let you instrument the running kernel without modifying source. Modern Linux observability.\n- **PyTorch `torch.profiler`** is the AI-specific tool: layer-level traces, kernel attribution, memory snapshots, integration with Chrome's perfetto for visualization.\n- **Always profile before optimizing.** \"I thought it was the matmul; turned out it was a Python list comprehension\" is the most common debugging story."
+  },
+  {
+    "slug": "/foundations/cpp-memory/custom-allocators",
+    "track": "foundations",
+    "module": "foundations/cpp-memory",
+    "title": "PyTorch Caching Allocator",
+    "tldr": "- **`cudaMalloc` and `cudaFree` are slow** — ~50 μs and ~10 μs respectively. Calling them on every forward / backward step would dominate small-model training.\n- **The PyTorch caching allocator** is a userspace pool: it grabs large chunks from `cudaMalloc` upfront, hands out sub-allocations, and reuses them as tensors come and go. **`torch.empty(N)` typically costs 0–1 μs** in steady state.\n- The same pattern shows up everywhere production C++ goes fast: jemalloc, tcmalloc, arena allocators, slab allocators. **\"Don't call malloc on the hot path\"** is the universal performance discipline.\n- The PyTorch allocator splits, merges, recycles blocks; tracks per-stream allocations to avoid hazards on async work; offers an \"expandable segments\" mode (2024+) that grows as needed.\n- **Read `torch.cuda.memory_summary()`** to see what the allocator is doing. Fragmentation, peak allocation, and reserved-vs-allocated are the metrics that matter."
+  },
+  {
+    "slug": "/foundations/cpp-memory/move-semantics",
+    "track": "foundations",
+    "module": "foundations/cpp-memory",
+    "title": "Move Semantics",
+    "tldr": "- A **copy** of a `vector<float>` of size N allocates a fresh heap buffer and `memcpy`s N floats. **A move** swaps internal pointers and leaves the source empty. **Same result; ~10000× faster.**\n- C++11 added **rvalue references (`T&&`)** and `std::move` to express \"I'm done with this; you can take its guts.\" Modern C++ depends on them everywhere — every standard container, every smart pointer.\n- The **rule of zero** is the modern C++ design ideal: write classes that don't need a destructor, copy constructor, or move constructor — let the compiler synthesize them from member types. PyTorch's tensor classes follow this almost completely.\n- **Return-value optimization (RVO)** has made many naive returns \"free\" for years; move semantics fill in the gaps RVO can't reach (e.g., returning one of two locals).\n- For ML systems code: **heap allocations on a hot path are the enemy.** Move semantics + small-buffer optimization + arena allocators are the toolkit for keeping tensors out of malloc."
+  },
+  {
+    "slug": "/foundations/cpp-memory/smart-pointers",
+    "track": "foundations",
+    "module": "foundations/cpp-memory",
+    "title": "Smart Pointers & RAII",
+    "tldr": "- **RAII** = Resource Acquisition Is Initialization. The C++ pattern where a resource (memory, file, lock, mutex) is owned by an object whose destructor releases it. **The single most important C++ idea.**\n- **`std::unique_ptr<T>`** owns a heap allocation. Non-copyable, movable. Destructor calls `delete`. Zero overhead vs raw pointer. Default for \"this is mine.\"\n- **`std::shared_ptr<T>`** is reference-counted ownership — destructor decrements the refcount; when it hits 0, `delete`. ~24 bytes overhead per pointer + atomic refcount operations on copy / destroy. Default for \"shared between threads / scopes.\"\n- **`std::weak_ptr<T>`** is a non-owning observer for `shared_ptr`. Used to break cycles.\n- ML systems code uses `unique_ptr` for owned buffers, `shared_ptr` for tensor storage (PyTorch's `intrusive_ptr` is a custom variant), and *almost never* raw `new` / `delete`."
+  },
+  {
     "slug": "/foundations/cpp-memory/stack-vs-heap",
     "track": "foundations",
     "module": "foundations/cpp-memory",
     "title": "Stack vs Heap",
     "tldr": "- The **stack** is a fast, LIFO region of memory tied to function calls. Allocation is one register decrement; deallocation is automatic when the function returns.\n- The **heap** is a general-purpose region you allocate from explicitly (`new`, `malloc`). Allocation involves bookkeeping, can fragment, and you're responsible for freeing.\n- A stack allocation is typically **~1 ns**; a heap allocation is **~50–500 ns** depending on the allocator and contention.\n- ML systems code stays on the stack as much as possible — heap traffic on a hot path is a known performance killer."
+  },
+  {
+    "slug": "/foundations/parallelism/async",
+    "track": "foundations",
+    "module": "foundations/parallelism",
+    "title": "Async Runtimes",
+    "tldr": "- **Async** lets one thread juggle thousands of concurrent operations by **suspending** when blocked (waiting for I/O, a future, a timer) and **resuming** when ready. Coroutines are the language-level mechanism.\n- A **runtime** schedules suspended coroutines onto threads. Python's `asyncio`, Rust's `tokio`, C++ coroutines + executors, JavaScript's event loop — all the same model with different syntax.\n- Async wins when **most of your time is spent waiting** — network I/O, database queries, LLM API calls, file reads. For pure CPU work, threads (or processes) are still the right choice.\n- **CUDA streams are GPU async**: a stream is an ordered queue of GPU operations; multiple streams run concurrently on the same GPU. Every modern PyTorch / CUDA program implicitly uses streams; explicit stream control unlocks overlap-comm-with-compute optimizations.\n- **Modern serving stacks (vLLM, FastAPI, SGLang) are entirely async on the orchestration side**. Hundreds of concurrent connections handled by one process; the heavy compute is dispatched to threads/GPUs that run in the background."
+  },
+  {
+    "slug": "/foundations/parallelism/simd",
+    "track": "foundations",
+    "module": "foundations/parallelism",
+    "title": "SIMD",
+    "tldr": "- **SIMD** = Single Instruction, Multiple Data. One CPU instruction operates on a whole vector of values. **AVX-512 does 16 FP32 ops per cycle; ARM SVE2 is similar; Apple AMX adds matrix-shaped ops.**\n- It's a third level of parallelism *below* threads and processes — same core, multiple lanes per instruction.\n- **Compilers auto-vectorize** simple loops with `-O3 -march=native`. They struggle with: pointer aliasing, conditional branches, non-trivial reductions. Anything they don't vectorize, you write intrinsics for.\n- **Pyodide / numpy / `__builtin_*` intrinsics** are the layered API. Numpy's array operations dispatch to SIMD-optimized C; Eigen / xsimd / highway / std::experimental::simd give portable C++ access.\n- For ML on CPU: `llama.cpp`'s NEON / AVX-512 paths are the production reference. SIMD is what makes \"decode a 7B Q4_K_M on a phone\" runnable."
+  },
+  {
+    "slug": "/foundations/parallelism/threading",
+    "track": "foundations",
+    "module": "foundations/parallelism",
+    "title": "Threading",
+    "tldr": "- A **thread** is a kernel-scheduled unit of execution sharing the address space of a process. **Creating one costs ~10 μs**; switching between two costs ~1–10 μs depending on cache thrashing.\n- **Don't fan out to one thread per task.** Use a thread pool sized to the core count; queue tasks. The thread-per-task model dies under any real workload.\n- **Synchronization primitives**: atomics (cheapest, lock-free), mutexes (general-purpose), condvars (wait/signal), semaphores (counters), barriers (group sync). Pick by the data structure, not the syntax.\n- **Lock contention** is the silent killer. Two threads fighting over one mutex serialize each other; you've added overhead with no parallelism. The fix is usually: shard the data, use lock-free structures, or relax the consistency requirement.\n- The Python GIL **prevents true CPU parallelism in pure Python** — but releases for C extensions (NumPy, PyTorch, etc.). For Python-heavy work use multiprocessing; for C-heavy work threading is fine."
   },
   {
     "slug": "/llm-architecture/attention/flash-attn-3",

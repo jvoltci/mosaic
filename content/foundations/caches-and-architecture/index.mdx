@@ -7,7 +7,14 @@ description: Cache lines, branch prediction, data-oriented design — why your c
 
 Two algorithms with the same big-O can differ by 10× because one respects the cache hierarchy and the other doesn't. This module is about the silicon-level facts that the language standard hides from you.
 
-> Lessons coming: Cache Lines & Spatial Locality · Branch Prediction · NUMA & Topology · Profiling Tools (perf, ncu, eBPF)
+<ModuleProgress
+  lessons={[
+    { slug: '/foundations/caches-and-architecture/cache-lines', title: 'Cache Lines', estMin: 12 },
+    { slug: '/foundations/caches-and-architecture/branch-prediction', title: 'Branch Prediction', estMin: 12 },
+    { slug: '/foundations/caches-and-architecture/numa-and-topology', title: 'NUMA & Topology', estMin: 14 },
+    { slug: '/foundations/caches-and-architecture/profiling', title: 'Profiling Tools', estMin: 14 },
+  ]}
+/>
 
 <Capstone
   title="Find the slowest cache miss in your code"

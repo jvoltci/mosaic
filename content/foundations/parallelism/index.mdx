@@ -7,7 +7,13 @@ description: Threads, lock-free data structures, and how to use vector instructi
 
 Modern CPUs give you parallelism at three levels: across cores (threads), within a single core (instruction-level), and within a single instruction (SIMD). ML kernels exploit all three.
 
-> Lessons coming: OS-Level Threading · Async Runtimes · SIMD Intrinsics (AVX-512, NEON, SVE2)
+<ModuleProgress
+  lessons={[
+    { slug: '/foundations/parallelism/threading', title: 'Threading', estMin: 14 },
+    { slug: '/foundations/parallelism/async', title: 'Async Runtimes', estMin: 14 },
+    { slug: '/foundations/parallelism/simd', title: 'SIMD', estMin: 12 },
+  ]}
+/>
 
 <Capstone
   title="Lock-free SPSC ring buffer that beats std::queue 50×"
