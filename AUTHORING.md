@@ -16,7 +16,8 @@ This is the playbook for adding lessons, fixing typos, and evolving Mosaic over 
    - Set `available: true`
    - Pick or reuse an `illustration` name (or leave `'placeholder'`)
    - Make sure the hex `(q, r)` doesn't collide with another tile in the same region
-6. **Push.** Vercel auto-deploys; the `/cheatsheet` page rebuilds with your new TL;DR.
+6. **Run `npm run verify-mapping`.** Catches any of the four registrations you missed *before* you push. Wired to `prebuild` and `predev` so the build itself blocks on drift.
+7. **Push.** GitHub Actions auto-deploys; the `/cheatsheet` page rebuilds with your new TL;DR.
 
 That's it. Helpers contributing single lessons never need to touch React.
 
@@ -61,11 +62,26 @@ All registered globally in [`mdx-components.tsx`](./mdx-components.tsx) — no i
 | `<RunInBrowser code={\`...\`} description="..." group="..." variants={[...]} />` | Pyodide-powered Python runner. Works on phone browsers. ~6 MB load on first click; cached. `group` shares state across cells; `variants` adds quick-tweak chips for mobile. |
 | `<FillIn prompt="..." answer="..." prefix="..." suffix="..." accept={[...]} hint="..." explanation="..." />` | Code-completion / short-answer prompt. Active recall. Use 1–2 per lesson. |
 | `<CostCalc workload="train-7b" hardware={["b200","mi355x","tpu-v6","h100"]} gpus={1024} />` | Live training cost / latency / energy comparator across hardware. Numbers from `lib/hardware-canon.ts`. |
+| `<Capstone title= pitch= what= sota=[] device= time= level= steps=[...] outcomes=[...] />` | End-of-module project card. With `steps`, renders a numbered guide — see "Capstones with steps" below. |
 | ` ```mermaid ` | Mermaid diagrams (built into Nextra). |
+
+`<FocusScroll>` and `<PathPicker>` are layout primitives, not lesson components — used by `CourseShell` and the `learning-paths` page. You won't reach for them while writing a lesson.
 
 ### Running code in lessons
 
 `<RunInBrowser>` is the only runtime component. Pure Python via Pyodide — no GPU, no networking. Perfect for math, data structures, visualizations, sanity checks. Works on phone browsers. For GPU/large-model demos, **show the runnable code as a normal fenced code block** with a one-line "run this on a GPU box" comment. We deliberately don't link to Colab — broken external repos and one-click-then-wait-30-seconds is friction we don't want.
+
+#### Why Pyodide and not a real Python sandbox?
+
+Mosaic teaches people who are heading into roles where the production stack is C++, CUDA, Rust, Triton, MLIR. So why does the in-browser runner only do Python?
+
+Because the in-browser runner is for **concept demonstration**, not for the languages of the production stack. A C++ kernel doesn't compile in three seconds in a browser; CUDA can't run in a browser at all. Building that infrastructure would cost weeks for ~5% of the teaching value.
+
+Pyodide is universal, fast to start (~6 MB cold, cached after), and ships numpy + scipy. That's enough to teach the *idea* — paged KV cache, the autograd engine, FlashAttention's online-softmax math, the AllReduce ring, the MCP message shape — in a window that opens on a phone.
+
+The capstones direct learners to write the real thing in the real language: Triton on Colab GPU, ExecuTorch on iPhone, vLLM-clone in CUDA, FSDP2 on rented Modal GPUs. That's where the language matches the task. **The browser runner sells the concept; the capstone sells the production artifact.** Don't try to make the runner pull double duty.
+
+Every snippet you put inside `<RunInBrowser>` must run cleanly under Pyodide stdlib + numpy. No `pydantic`, no `torch`, no `transformers`. Hand-roll the validator, write the tensor math by hand. If the snippet feels too constrained, that's the signal it should be a fenced code block with a "run this on a GPU box" note instead.
 
 ---
 
@@ -144,7 +160,7 @@ A new **track** is bigger:
 
 1. New folder `content/<new-track>/` with `_meta.ts`, `index.mdx`, modules
 2. Add to top-level `content/_meta.ts`
-3. Add to `TrackKey` union, `TRACK_LABELS`, `TRACK_ACCENT`, `TRACK_ICON`, `TRACK_TAGLINE` in `lib/mosaic-tiles.ts`
+3. Add to `TrackKey` union, `TRACK_LABELS`, `TRACK_ACCENT`, `TRACK_NUM`, `TRACK_SHORT`, `TRACK_TAGLINE` in `lib/mosaic-tiles.ts`
 4. Add a new accent CSS variable in `app/globals.css` (the `--m-track-*` tokens)
 5. Pick a hex coordinate region (extend the layout) and add tiles
 6. Update the mosaic header copy if needed
@@ -154,12 +170,15 @@ A new **track** is bigger:
 ## What `npm run dev` and `npm run build` actually do
 
 ```bash
-npm run dev        # 1. node scripts/build-cheatsheet.mjs (predev)
-                   # 2. next dev — hot-reloading server at localhost:3000
+npm run dev        # 1. node scripts/verify-mapping.mjs   (predev)
+                   # 2. node scripts/build-cheatsheet.mjs (predev)
+                   # 3. next dev — hot-reloading server at localhost:3000
 
-npm run build      # 1. node scripts/build-cheatsheet.mjs (prebuild)
-                   # 2. next build — produces ./.next/ static export
+npm run build      # 1. node scripts/verify-mapping.mjs   (prebuild)
+                   # 2. node scripts/build-cheatsheet.mjs (prebuild)
+                   # 3. next build — produces ./out static export
 
+npm run verify-mapping     # just check tile/file/_meta/ModuleProgress integrity
 npm run build-cheatsheet   # just regenerate lib/cheatsheet-index.json
 ```
 
@@ -189,6 +208,64 @@ Update these as the field moves. **Mark anything that's been superseded** (e.g.,
 - **Lilian Weng** — `lilianweng.github.io/` (deep, careful tutorials)
 - **The Gradient, Distill (archive), Anthropic Research** — long-form
 - **Semianalysis** — hardware and inference economics
+
+---
+
+## Capstones with steps
+
+Every module ends with a `<Capstone>`. The minimum signature is title + pitch + what + sota + device + time + level. That alone renders a "go build this" card.
+
+For modules where the build is non-trivial (almost all of them), pass two more props — `steps` and `outcomes` — and the capstone renders a step-by-step guide:
+
+```jsx
+<Capstone
+  title="Implement attention from scratch — including the FlashAttention tile"
+  pitch="The attention block as it actually runs in production, written, verified against Llama-3.2-1B."
+  what="A single-file PyTorch implementation: multi-head, GQA, RoPE, and a tiled FlashAttention-style forward pass."
+  sota={['PyTorch 2.x', 'Llama-3.2-1B (reference)', 'FlashAttention paper (Dao et al.)']}
+  device="colab"
+  time="One focused weekend (~10 h)"
+  level="advanced"
+  steps={[
+    {
+      title: 'Set up the harness — Llama-3.2-1B on Colab',
+      goal: 'Load Llama-3.2-1B-Instruct via transformers. Pull out one attention layer\'s weights.',
+      checkpoint: 'You can torch.load("attn_layer_0.pt") and get a dict with the right shapes.',
+      trap: 'Llama-3.2-1B uses GQA — num_key_value_heads=8 not 32.',
+      est: '40 min',
+    },
+    // … 5 more steps
+  ]}
+  outcomes={[
+    'A working attention block — MHA + GQA + RoPE + tiled forward — that matches a real model',
+    'Fluency reading FlashAttention-style code: tiles, online softmax, the running-max trick',
+  ]}
+/>
+```
+
+**Conventions for `steps`:**
+
+- 4–6 steps is the sweet spot. Fewer feels hand-wavy; more feels like a tutorial.
+- Each step needs `title`, `goal`, `checkpoint`, `est`. `trap` is optional but include one wherever a smart reader will fall into a non-obvious pit (most steps deserve a trap).
+- **Goal** is what to do, in one sentence. **Checkpoint** is how the reader knows they're done — a runnable assert, a printable shape, a numerical match. **Trap** is the silent-failure pitfall that costs an hour to debug.
+- **Est** is honest wall-clock time including reading + thinking, not just typing. The whole capstone time should equal the sum of step `est`s.
+- **Outcomes** is what the reader can put on a resume after finishing — concrete artifacts (a repo, a benchmark plot, a deployed endpoint), not vague capabilities.
+
+Capstones are the part of Mosaic that puts a finished thing in someone's portfolio. Take them seriously — the step-by-step guide is the difference between "I read about FlashAttention" and "I implemented FlashAttention."
+
+---
+
+## Mapping integrity
+
+Mosaic has five places a lesson must be registered (the `.mdx` file, the tile in `mosaic-tiles.ts`, the `_meta.ts` key, the `<ModuleProgress>` slug, and a `## TL;DR` for the cheatsheet). Drift between them caused real bugs (lessons that exist but don't appear on the map; tiles that exist but route to 404).
+
+`scripts/verify-mapping.mjs` checks all five — runs as `prebuild` and `predev`, so neither the local dev server nor a deployment will start if any lesson is half-wired. Run it manually after big edits:
+
+```bash
+npm run verify-mapping
+```
+
+If you see `✗ tile /foo/bar/baz: lesson key 'baz' not in content/foo/bar/_meta.ts`, that's a one-line fix in the meta file. The script's exit code is the build's exit code — there's no "ignore this warning" mode.
 
 ---
 

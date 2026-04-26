@@ -1,17 +1,31 @@
 # Mosaic
 
-A free, self-paced course on **AI Systems, ML Compilers, Training, LLM Architecture, and Applied AI** — built openly, designed to be beautiful enough that people actually want to read it.
+A free, open-source course on **AI Systems, ML Compilers, Training, LLM Architecture, Applied AI, and Edge AI** — written densely, read on any device, runnable in the browser.
 
-**Live:** [jvoltci.github.io/mosaic](https://jvoltci.github.io/mosaic) (after first GitHub Pages deploy)
+**Live:** [jvoltci.github.io/mosaic](https://jvoltci.github.io/mosaic)
 
 ## What's here
 
-- 6 tracks · ~74 hex-tile lessons in an interactive course map
-- 22+ deep lessons written (~1500–2500 words each, with code, KaTeX math, themed Mermaid diagrams, in-browser Pyodide demos, 6–10 cutting-edge references)
-- A SOTA-grounded **Capstone** at the end of every module — real projects you can build (cache-friendly matmul, 4-bit Llama on your phone, QLoRA chatbot, FSDP2 sharding, Triton kernels, RAG over your repo, etc.)
-- Static-export Next.js 15 + Nextra 4 with a custom `CourseShell` (no docs-theme chrome — fully bespoke nav, lesson chrome, prose typography)
-- KaTeX math, brand-themed Mermaid, JetBrains Mono code blocks, Source Serif 4 prose
-- LocalStorage-backed progress · auto-aggregated cheatsheet · selection → Google/Wiki/arXiv lookup popup
+- **7 tracks · 81 lessons** in an interactive hex-tile course map. Every tile is a real lesson — no stubs.
+- **3 reading orders** that thread the same lessons differently: *AI Systems*, *ML Compilers*, *Edge AI*. Pick the one that matches the role you're hiring into.
+- **A SOTA-grounded `<Capstone>` at the end of every module** — step-by-step builds with checkpoints, traps, time estimates, and outcomes. Cache-friendly matmul, 4-bit Llama on your phone, FSDP2 sharding, Triton kernels, RAG over your repo, ExecuTorch on iOS, and more.
+- **Runnable Python in every lesson** via Pyodide — works on a phone browser, no install. ~6 MB on first click, cached after.
+- **`<RunInBrowser>`, `<Quiz>`, `<FillIn>`, `<CostCalc>`, `<Resources>`** — first-class MDX components for active recall, hardware cost comparison, and curated frontier references.
+- **Static-export Next.js 15 + Nextra 4** with a fully bespoke `CourseShell` (no docs-theme chrome — custom nav, lesson chrome, prose typography).
+- **KaTeX math, brand-themed Mermaid diagrams, JetBrains Mono code, Source Serif 4 prose.**
+- **LocalStorage progress + auto-aggregated `/cheatsheet` + selection → Google/Wiki/arXiv lookup popup.**
+
+## Tracks
+
+| Track | Focus |
+| --- | --- |
+| `foundations` | C++ memory, caches, branch prediction, NUMA, profiling — the silicon facts language standards hide. |
+| `ml-execution` | Tensors-in-memory, GEMM, attention, KV-cache, quantization (FP8 / INT4 / MXFP4 / NVFP4 / rotation). |
+| `training` | Optimizers, FP8 training, FSDP2 / TP / PP / zero-bubble, post-training (SFT, LoRA, DPO, GRPO). |
+| `llm-architecture` | Attention variants (MHA / GQA / MLA), RoPE, FlashAttention-3, KV-cache from a systems lens. |
+| `compilers` | MLIR, lowering, LLVM IR, Triton, CUTe / CUTLASS, ThunderKittens, torch.compile internals. |
+| `applied` | LLM basics, structured output, tool use, embeddings, RAG, ReAct agents, MCP, vLLM serving. |
+| `edge-ai` | NPUs (Hexagon), on-device runtimes (Core ML / ExecuTorch / TFLite), distillation, edge-quant. |
 
 ## Local development
 
@@ -21,7 +35,10 @@ npm run dev          # http://localhost:3000
 npm run build        # production static export to ./out
 ```
 
-`predev` and `prebuild` automatically run `scripts/build-cheatsheet.mjs` to regenerate `lib/cheatsheet-index.json` from `## TL;DR` blocks across all lessons.
+`predev` and `prebuild` run two checks before anything ships:
+
+1. `scripts/verify-mapping.mjs` — verifies every tile has a file, every file has a tile, every available tile is keyed in its module's `_meta.ts` and `<ModuleProgress>`, and every lesson has a `## TL;DR` for the cheatsheet. Build fails fast on drift.
+2. `scripts/build-cheatsheet.mjs` — regenerates `lib/cheatsheet-index.json` from every lesson's `## TL;DR` block.
 
 > **Don't run `npm run build` while `npm run dev` is running** in the same checkout — they share `.next/` and stomp on each other. Stop dev first, or `rm -rf .next` and restart.
 
@@ -33,28 +50,37 @@ mosaic/
 │   ├── layout.tsx                Root: fonts + CourseShell wrapper
 │   └── [[...mdxPath]]/page.tsx   Catch-all → renders any content/**/*.mdx
 ├── components/
-│   ├── course/                   CourseShell · CourseNav · LessonChrome · PageWrapper
+│   ├── course/                   CourseShell · CourseNav · LessonChrome · PageWrapper · FocusScroll
 │   ├── tiles/                    Hand-coded SVG illustrations for the mosaic
 │   ├── Mermaid.tsx               Custom-themed Mermaid (replaces Nextra default)
 │   ├── MosaicMap.tsx             Interactive hex grid (landing / map / cheatsheet)
-│   ├── RunInBrowser.tsx          Pyodide Python in the browser
-│   ├── Capstone.tsx              "Build it" cards on module index pages
-│   ├── SupportSection.tsx        Tip jar (landing only)
-│   └── ...                       Quiz · Resources · ModuleProgress · etc.
+│   ├── RunInBrowser.tsx          Pyodide Python in the browser, with syntax highlighting
+│   ├── Capstone.tsx              "Build it" cards on module index pages (with steps + checkpoints)
+│   ├── FillIn.tsx                Code-completion / short-answer prompts for active recall
+│   ├── CostCalc.tsx              Live training-cost comparator across hardware
+│   ├── Quiz.tsx                  Multi-choice quick check with reveal
+│   └── ...                       LessonComplete · Resources · ModuleProgress · etc.
 ├── content/                      All lessons as MDX + _meta.ts sidebar order
 │   ├── index.mdx                 Landing
 │   ├── cheatsheet.mdx            Auto-rendered cheatsheet
 │   ├── map.mdx                   Full-screen course map
+│   ├── learning-paths.mdx        The three reading orders
 │   ├── foundations/
 │   ├── ml-execution/
 │   ├── training/
 │   ├── llm-architecture/
 │   ├── compilers/
-│   └── applied/
+│   ├── applied/
+│   └── edge-ai/
 ├── lib/
 │   ├── mosaic-tiles.ts           Source of truth for all tiles + sequencing
 │   ├── hex.ts                    Axial hex math
+│   ├── use-progress.ts           localStorage-backed progress hook
+│   ├── hardware-canon.ts         Canonical numbers for CostCalc
 │   └── cheatsheet-index.json     Auto-generated by scripts/build-cheatsheet.mjs
+├── scripts/
+│   ├── verify-mapping.mjs        Tile/file/_meta/ModuleProgress/cheatsheet integrity
+│   └── build-cheatsheet.mjs      TL;DR scraper → cheatsheet-index.json
 ├── templates/LESSON_TEMPLATE.mdx Copy for every new lesson
 ├── mdx-components.tsx            Global MDX component registry
 ├── next.config.mjs               Static export · basePath · Mermaid alias
@@ -63,7 +89,7 @@ mosaic/
 
 ## Authoring a new lesson
 
-See [`AUTHORING.md`](./AUTHORING.md) for the full playbook (style, voice, components). Short version:
+See [`AUTHORING.md`](./AUTHORING.md) for the full playbook. Short version:
 
 ```bash
 cp templates/LESSON_TEMPLATE.mdx content/<track>/<module>/<your-slug>.mdx
@@ -76,29 +102,31 @@ Then wire it in three places:
 2. Parent module's `index.mdx` `<ModuleProgress lessons={...} />`
 3. `lib/mosaic-tiles.ts` — flip `available: false` → `available: true`
 
-`git push` and the cheatsheet auto-rebuilds; the GitHub Action redeploys.
+`npm run verify-mapping` will tell you if any of those are missing. The cheatsheet rebuilds automatically; the GitHub Action redeploys.
 
 ## MDX components available everywhere
 
 | Component | Purpose |
 | --- | --- |
 | `<Quiz>` | Multi-choice quick check with reveal |
+| `<FillIn>` | Code-completion / short-answer prompt — active recall |
 | `<Figure>` | Image with caption |
 | `<Cheatsheet>` | Inline TL;DR callout |
 | `<LessonComplete>` | "Mark complete" button (localStorage) |
 | `<ModuleProgress lessons={[...]}>` | Lesson list + progress bar (use on module index pages) |
 | `<RunInBrowser code={\`...\`}>` | Pyodide Python that runs in the browser, on phone too |
+| `<CostCalc workload= hardware={[...]} gpus= />` | Live training-cost comparator across H100/B200/MI355X/TPU-v6 |
 | `<Resources items={[{kind, href, title, author, note}]}>` | Linked references — `kind` ∈ paper/blog/video/repo/docs/book |
-| `<Capstone title= pitch= what= sota=[] device= time= level=>` | End-of-module "build it" project card |
+| `<Capstone title= pitch= what= sota=[] device= time= level= steps= outcomes= />` | End-of-module "build it" project card with step-by-step guide |
 | ` ```mermaid ` | Diagrams — themed to brand by `components/Mermaid.tsx` |
 
 ## Deploying to GitHub Pages
 
-The `.github/workflows/deploy.yml` workflow handles this on every push to `main`:
+The `.github/workflows/deploy.yml` workflow runs on push to `master`:
 
-1. **Push your repo to GitHub** (already done if you can see this README on github.com)
+1. **Push your repo to GitHub** (already done if you're reading this on github.com)
 2. **Settings → Pages → Source: GitHub Actions** (one-time, in the repo settings UI)
-3. **Push to `main`** → workflow builds the static export → deploys
+3. **Push to `master`** → workflow builds the static export → deploys
 
 The workflow sets `NEXT_PUBLIC_BASE_PATH=/mosaic` so paths resolve under `/mosaic/`. If you fork to a different repo name, edit that env var in the workflow.
 
@@ -113,4 +141,4 @@ For root deploys (custom domain or `<user>.github.io`), set `NEXT_PUBLIC_BASE_PA
 
 ## License
 
-MIT — see [LICENSE](./LICENSE) (add one if missing).
+MIT — see [LICENSE](./LICENSE).
