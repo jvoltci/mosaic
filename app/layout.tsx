@@ -53,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       dir="ltr"
-      className={`${fraunces.variable} ${sourceSerif.variable} ${inter.variable} ${jetbrains.variable}`}
+      className={`dark ${fraunces.variable} ${sourceSerif.variable} ${inter.variable} ${jetbrains.variable}`}
       suppressHydrationWarning
     >
       <body>

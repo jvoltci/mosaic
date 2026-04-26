@@ -144,7 +144,8 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
               const isActive = tooltip?.tile.slug === tile.slug
               const accent = TRACK_ACCENT[tile.track]
               const Illustration = illustrationFor(tile.illustration)
-              const target = tile.available ? tile.slug : tile.fallback
+              const slug = tile.available ? tile.slug : tile.fallback
+              const target = `${process.env.NEXT_PUBLIC_BASE_PATH || ''}${slug}`
 
               return (
                 <a
