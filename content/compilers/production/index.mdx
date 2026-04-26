@@ -5,12 +5,13 @@ description: torch.compile, JAX/Pallas, IREE/ExecuTorch, operator fusion — the
 
 # Production Compilers
 
-The compilers your workloads actually flow through. `torch.compile` is the default in PyTorch 2.x; JAX/XLA powers Google scale; IREE/ExecuTorch ships to mobile. This module is how each one composes the [foundation passes](../foundation) into a deployable artifact.
+The compilers your workloads actually flow through. `torch.compile` is the default in PyTorch 2.x; JAX/XLA powers Google scale; IREE/ExecuTorch ships models to mobile. This module is how each one composes the [foundation passes](../foundation) into a deployable artifact.
 
 <ModuleProgress
   lessons={[
     { slug: '/compilers/production/torch-compile', title: 'torch.compile', estMin: 16 },
+    { slug: '/compilers/production/operator-fusion', title: 'Operator Fusion', estMin: 14 },
+    { slug: '/compilers/production/jax-pallas', title: 'JAX & Pallas', estMin: 16 },
+    { slug: '/compilers/production/iree-executorch', title: 'IREE & ExecuTorch', estMin: 14 },
   ]}
 />
-
-> Lessons coming: JAX & Pallas · IREE & ExecuTorch · Operator Fusion

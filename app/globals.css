@@ -2895,30 +2895,92 @@ h2.m-focus-h2.is-active {
 
 .m-run-code {
   margin: 0;
-  padding: 1rem 1.1rem;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.85rem;
   line-height: 1.6;
   background: var(--m-code-bg);
   color: var(--m-fg);
   overflow: auto;
-  max-height: 22rem;
-  border: none;
-  resize: vertical;
   width: 100%;
   outline: none;
   tab-size: 4;
 }
 
-.m-run-code:focus {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, var(--m-terracotta)) 40%, transparent);
+.m-run-code-wrap {
+  position: relative;
+  max-height: 24rem;
+  overflow: auto;
+  background: var(--m-code-bg);
+}
+
+.m-run-editor {
+  caret-color: var(--m-fg);
+  min-height: 5rem;
+}
+
+.m-run-editor :global(textarea),
+.m-run-textarea {
+  outline: none !important;
+  border: none !important;
+}
+
+.m-run-pre,
+.m-run-code-mobile {
+  margin: 0;
+  white-space: pre;
 }
 
 .m-run-code-mobile {
   display: none;
-  white-space: pre;
-  resize: none;
+  padding: 1rem 1.1rem;
+  max-height: 22rem;
 }
+
+@media (max-width: 760px) {
+  /* On phones, the editor textarea is hostile (tiny, awkward selection).
+     Show a read-only highlighted pre; users tweak via variant chips. */
+  .m-run-code-desktop { display: none; }
+  .m-run-code-mobile { display: block; }
+}
+
+/* Prism — token colors tuned for dark + light themes */
+.m-run-pre .token.comment,
+.m-run-code-mobile .token.comment { color: var(--m-fg-dim); font-style: italic; }
+.m-run-pre .token.keyword,
+.m-run-code-mobile .token.keyword { color: #c792ea; }
+.m-run-pre .token.string,
+.m-run-code-mobile .token.string { color: #8be9a3; }
+.m-run-pre .token.number,
+.m-run-code-mobile .token.number { color: #f78c6c; }
+.m-run-pre .token.builtin,
+.m-run-code-mobile .token.builtin { color: #82aaff; }
+.m-run-pre .token.function,
+.m-run-code-mobile .token.function { color: #82aaff; }
+.m-run-pre .token.operator,
+.m-run-code-mobile .token.operator { color: var(--m-fg-muted); }
+.m-run-pre .token.class-name,
+.m-run-code-mobile .token.class-name { color: #ffcb6b; }
+.m-run-pre .token.decorator,
+.m-run-code-mobile .token.decorator { color: #f78c6c; }
+.m-run-pre .token.boolean,
+.m-run-code-mobile .token.boolean { color: #c792ea; }
+.m-run-pre .token.punctuation,
+.m-run-code-mobile .token.punctuation { color: var(--m-fg-muted); }
+
+[data-theme='light'] .m-run-pre .token.keyword,
+[data-theme='light'] .m-run-code-mobile .token.keyword { color: #af00db; }
+[data-theme='light'] .m-run-pre .token.string,
+[data-theme='light'] .m-run-code-mobile .token.string { color: #0a8043; }
+[data-theme='light'] .m-run-pre .token.number,
+[data-theme='light'] .m-run-code-mobile .token.number { color: #e25700; }
+[data-theme='light'] .m-run-pre .token.builtin,
+[data-theme='light'] .m-run-pre .token.function,
+[data-theme='light'] .m-run-code-mobile .token.builtin,
+[data-theme='light'] .m-run-code-mobile .token.function { color: #1f6feb; }
+[data-theme='light'] .m-run-pre .token.class-name,
+[data-theme='light'] .m-run-code-mobile .token.class-name { color: #d35e00; }
+[data-theme='light'] .m-run-pre .token.decorator,
+[data-theme='light'] .m-run-code-mobile .token.decorator { color: #e25700; }
 
 @media (max-width: 760px) {
   /* On phones, the textarea is hostile (tiny, no autocomplete, awkward selection).

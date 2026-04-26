@@ -91,6 +91,13 @@
     "tldr": "- **CUTLASS** = NVIDIA's open-source C++ template library for GEMM-class kernels. The reference for *how to write a fast tensor-core kernel*. Every cuBLAS kernel from Hopper onward shares its design language with CUTLASS.\n- **CuTe** = the layout sublanguage inside CUTLASS 3.x+. A small, expressive type system for *tile shapes* and *layouts* — the maps between logical tile coordinates and physical memory.\n- The mental shift: **everything is a layout.** A SMEM tile, a register fragment, a TMA descriptor, a swizzle pattern — all are CuTe `Layout` values composed by `tile`, `partition`, `coalesce`, etc.\n- **CUTLASS 4** (2024–2025) is the Hopper/Blackwell native version. Adds first-class TMA, WGMMA, warp specialization, persistent kernels, FP8/FP4. Older CUTLASS 2.x is now legacy.\n- Hand-written CUTLASS still beats Triton by 5–10% on edge shapes and is the only way to access certain NVIDIA-specific instructions immediately at launch. The cost is real C++ template depth."
   },
   {
+    "slug": "/compilers/kernels/hardware-landscape",
+    "track": "compilers",
+    "module": "compilers/kernels",
+    "title": "Hardware Landscape 2026",
+    "tldr": "- **NVIDIA Blackwell (B200, GB200)** is the 2025–2026 flagship: 5th-gen tensor cores, FP4/FP6 native, ~2.5× H100 throughput, 192 GB HBM. The default for new frontier work, despite the price.\n- **AMD MI355X** matches Blackwell's FP8 throughput, ships *288 GB* HBM (50% more than B200), at lower per-hour pricing. Software is still catching up but ROCm 6.x + Triton-AMD make it viable for serious work.\n- **Google TPU v6 (Trillium)** — TPU v5p's successor. Locked to GCP and JAX, but extraordinary perf/$ on TPU-shaped workloads. Where Gemini gets trained.\n- **Cerebras WSE-3 / Groq LPU** — non-GPU silicon for inference and specific training niches. Cerebras: enormous on-chip memory, dataflow execution, TF-shaped programming model. Groq: deterministic, ultra-low-latency inference for routing-heavy LLM serving.\n- **AWS Trainium 2** — Amazon's training chip. Software (Neuron SDK) is the friction; pricing is the draw. Used at Amazon and increasingly by frontier labs as a complement.\n- **Apple M4 Max / Qualcomm Snapdragon X / Ampere AmpereOne** — the *non-data-center* tier where edge AI lives. Different rules; covered in the [Edge AI](../../applied/serve/on-device) thread."
+  },
+  {
     "slug": "/compilers/kernels/thunderkittens",
     "track": "compilers",
     "module": "compilers/kernels",
@@ -103,6 +110,27 @@
     "module": "compilers/kernels",
     "title": "Triton",
     "tldr": "- **Triton** is a Python-syntax kernel DSL that compiles via MLIR (TritonGPU dialect → llvm) to PTX. You write what looks like NumPy on tiles; the compiler emits register-tiled, SMEM-staged, tensor-core-using kernels.\n- The mental shift: **you program the block, not the thread.** A Triton \"program\" is one CTA's worth of work. Inside it you operate on whole tiles (vectors, matrices); the compiler picks the threads-per-warp distribution.\n- **`@triton.autotune`** picks the best (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages) per-shape on first run. This is the feature that makes Triton competitive with hand-tuned CUTLASS without the maintenance.\n- Triton is the *daily-driver* kernel language of OpenAI, the Triton-using parts of PyTorch (`torch.compile` lowers to it), and most performance-critical OSS work in 2025–2026. Hand-written CUTLASS still wins by 5–10% on edge cases.\n- The 2024 frontier: Triton 3.x adds Hopper TMA and warp specialization. Triton on Blackwell (5th-gen tensor cores, FP4) lands incrementally through 2025–2026."
+  },
+  {
+    "slug": "/compilers/production/iree-executorch",
+    "track": "compilers",
+    "module": "compilers/production",
+    "title": "IREE & ExecuTorch",
+    "tldr": "- **IREE** (Intermediate Representation Execution Environment) is Google's open-source compiler + runtime. Compiles models (any frontend that emits StableHLO/MLIR) to a portable artifact that runs on CPU, GPU, NPU, edge silicon. Strongest production story for AMD, Apple, embedded.\n- **ExecuTorch** is PyTorch's *mobile* runtime. Takes a `torch.export()`-d model graph, lowers through an MLIR-based path, produces a `.pte` (PyTorch ExecuTorch) artifact you ship in an app bundle.\n- Both compile **ahead of time**. There's no Python at runtime; the deployable artifact is a tiny binary.\n- Both are **MLIR-native** — they compose with the dialects you saw in [MLIR Overview](../foundation/mlir-overview), and accept custom dialects from hardware vendors. This is how Apple, Qualcomm, and AMD ship their NPU support.\n- For 2026 deployment: ExecuTorch is the path for PyTorch → mobile (Meta, OEM partners). IREE is the path for cross-framework, cross-hardware deployment, especially edge."
+  },
+  {
+    "slug": "/compilers/production/jax-pallas",
+    "track": "compilers",
+    "module": "compilers/production",
+    "title": "JAX & Pallas",
+    "tldr": "- **JAX** uses a different compiler stack than PyTorch. `jit`-decorated functions trace to **StableHLO** (a stable subset of HLO, the XLA op set), then XLA compiles to GPU/TPU.\n- **XLA** is the long-standing graph compiler (Google, ~2017+). It does fusion, layout assignment, code-gen for GPU/TPU/CPU. It's the production compiler that runs Gemini, every Google production model, and JAX-based research everywhere.\n- **Pallas** is JAX's *kernel DSL* — Triton-like, but inside JAX. You write a JAX function, decorate it with `pallas.pallas_call`, and it lowers to a hand-written kernel for GPU (via Triton) *or* TPU (via Mosaic, a TPU-specific kernel emitter).\n- The single most distinctive thing about Pallas: **the same kernel source can target both GPU and TPU**. The dtype/layout primitives are the same; the backend chooses how to lower.\n- For 2026 production: JAX is the dominant choice for TPU work, neck-and-neck with PyTorch on GPU. Pallas is the kernel escape hatch — used heavily inside Google for Gemini training, increasingly used externally for high-perf JAX kernels."
+  },
+  {
+    "slug": "/compilers/production/operator-fusion",
+    "track": "compilers",
+    "module": "compilers/production",
+    "title": "Operator Fusion",
+    "tldr": "- A **pointwise op** like `add`, `mul`, `relu`, `sigmoid` reads its inputs from HBM and writes its outputs to HBM. Doing this for 5 chained ops means 10 HBM trips and ~5× the bandwidth a single-pass implementation would need.\n- **Operator fusion** = generate one kernel that does the whole chain, keeping intermediates in registers. **2–10× speedup on bandwidth-bound chains**, often more on long ones.\n- **Inductor** (PyTorch's `torch.compile`), **XLA** (JAX/TF), **TVM**, **IREE** all do this automatically. They differ in how aggressive they are and what they fuse.\n- Three fusion classes:\n  1. **Pointwise + pointwise** — trivial; always done.\n  2. **Reduction + pointwise** (epilogue fusion) — a softmax fused with the multiply that follows it; the canonical attention optimization.\n  3. **Matmul + pointwise** (output-tile fusion) — a GEMM with bias-add or activation in the same kernel; what CUTLASS calls \"epilogue.\"\n- The **fusion boundary** is a memory-format change or a non-fusable op (random sample, sort, complex control flow). Compilers cluster fusable ops between these boundaries."
   },
   {
     "slug": "/compilers/production/torch-compile",

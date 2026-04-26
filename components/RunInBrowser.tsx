@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Editor from 'react-simple-code-editor'
+import Prism from 'prismjs'
+import 'prismjs/components/prism-python'
 
 type Status = 'idle' | 'loading-pyodide' | 'ready' | 'running' | 'error'
 
@@ -142,11 +145,14 @@ export function RunInBrowser({
     error: 'Run again',
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement> | React.KeyboardEvent<HTMLDivElement>,
+  ) => {
+    const ta = e.target as HTMLTextAreaElement
+    if (ta.tagName !== 'TEXTAREA') return
     // Don't interfere with IME composition (CJK input methods).
     if (e.nativeEvent.isComposing) return
 
-    const ta = e.currentTarget
     const start = ta.selectionStart
     const end = ta.selectionEnd
     const val = ta.value
@@ -243,21 +249,36 @@ export function RunInBrowser({
         {description && <span className="m-run-desc">{description}</span>}
       </div>
 
-      {/* Editable on desktop, read-only display on small phones (variants chips drive change). */}
-      <textarea
-        className="m-run-code m-run-code-desktop"
-        value={currentCode}
-        onChange={(e) => {
-          setCurrentCode(e.target.value)
-          setActiveVariant(null)
+      {/* Editable on desktop with syntax highlighting via Prism;
+          read-only highlighted display on small phones (variant chips drive change). */}
+      <div className="m-run-code-wrap m-run-code-desktop">
+        <Editor
+          value={currentCode}
+          onValueChange={(c) => {
+            setCurrentCode(c)
+            setActiveVariant(null)
+          }}
+          highlight={(c) => Prism.highlight(c, Prism.languages.python, 'python')}
+          padding={16}
+          tabSize={4}
+          insertSpaces={true}
+          textareaClassName="m-run-textarea"
+          preClassName="m-run-pre"
+          className="m-run-code m-run-editor"
+          onKeyDown={handleKeyDown}
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
+      </div>
+      <pre
+        className="m-run-code m-run-code-mobile"
+        aria-hidden
+        dangerouslySetInnerHTML={{
+          __html: Prism.highlight(currentCode, Prism.languages.python, 'python'),
         }}
-        onKeyDown={handleKeyDown}
-        spellCheck={false}
-        rows={Math.min(currentCode.split('\n').length + 1, 20)}
       />
-      <pre className="m-run-code m-run-code-mobile" aria-hidden>
-        <code>{currentCode}</code>
-      </pre>
+
 
       {variants && variants.length > 0 && (
         <div className="m-run-variants" role="group" aria-label="Quick variants">

@@ -1,0 +1,221 @@
+---
+title: Hardware Landscape 2026
+description: Blackwell, MI355X, TPU v6, Cerebras, Groq, Trainium — which chip is for which workload, and what each one actually means for kernel work.
+last_reviewed: 2026-04-26
+---
+
+# Hardware Landscape 2026
+
+> **Prereqs:** [SM Architecture](../../ml-execution/gpu-fundamentals/sm-architecture), [Triton](./triton). This lesson is the "big picture" map you fold back into the rest of the kernels module.
+
+## TL;DR
+
+- **NVIDIA Blackwell (B200, GB200)** is the 2025–2026 flagship: 5th-gen tensor cores, FP4/FP6 native, ~2.5× H100 throughput, 192 GB HBM. The default for new frontier work, despite the price.
+- **AMD MI355X** matches Blackwell's FP8 throughput, ships *288 GB* HBM (50% more than B200), at lower per-hour pricing. Software is still catching up but ROCm 6.x + Triton-AMD make it viable for serious work.
+- **Google TPU v6 (Trillium)** — TPU v5p's successor. Locked to GCP and JAX, but extraordinary perf/$ on TPU-shaped workloads. Where Gemini gets trained.
+- **Cerebras WSE-3 / Groq LPU** — non-GPU silicon for inference and specific training niches. Cerebras: enormous on-chip memory, dataflow execution, TF-shaped programming model. Groq: deterministic, ultra-low-latency inference for routing-heavy LLM serving.
+- **AWS Trainium 2** — Amazon's training chip. Software (Neuron SDK) is the friction; pricing is the draw. Used at Amazon and increasingly by frontier labs as a complement.
+- **Apple M4 Max / Qualcomm Snapdragon X / Ampere AmpereOne** — the *non-data-center* tier where edge AI lives. Different rules; covered in the [Edge AI](../../applied/serve/on-device) thread.
+
+## Why this matters
+
+The chip you target determines your tile shapes, your accumulator precision, your interconnect choices, and which kernel DSL is fastest. A kernel engineer who only knows H100 is suddenly half-blind in a B200 + MI355X + TPU world; an AI systems engineer who can't price a 7B training run across three clouds is going to over-pay by 2–3×. **2026 is the year frontier AI stopped being NVIDIA-monoculture**, and the systems literacy to navigate that is now part of the job.
+
+## The 2026 chips, by family
+
+### NVIDIA — Blackwell (B200, GB200, B100)
+
+5th-gen tensor cores, FP4 and FP6 in addition to FP8/FP16/BF16. Tensor Memory (a new on-chip pool between SMEM and registers) lets you hold larger accumulators than the register file alone. Roughly 2.5× H100 throughput at FP8.
+
+**What changes for kernel writers:**
+- WGMMA gets larger fragments (matched to TM); rewrite tile shapes if you've ported a Hopper kernel.
+- FP4/FP6 are real. Microscaling formats (MXFP4, NVFP4 — see [next lesson](../../ml-execution/quantization/mxfp4-nvfp4)) hit production.
+- Cluster sizes can grow; the inter-CTA shared memory (DSMEM) is bigger and faster.
+
+**Where it shines:** any workload that can use FP8 or below. Frontier LLM training with FP8. Inference with INT4 weights and FP8 KV.
+
+**Where it's overkill:** workloads still bound to FP16 (some legacy code), batch-1 latency-bound serving (HBM bandwidth helps but you're not using the new tensor cores fully).
+
+### AMD — MI355X, MI300X
+
+MI300X has been competitive with H100 on FP16 since 2024; MI355X (2025) lands ~MI300X × 1.9 on FP8 with *more memory* (288 GB vs B200's 192 GB).
+
+**What changes:** ROCm 6.x is materially better than 5.x; Triton-AMD is real (most Triton kernels run unmodified, modulo a few intrinsics). PyTorch nightly has good MI300X coverage; vLLM, SGLang, FlashAttention-3 all ship working AMD paths.
+
+**Where it shines:** memory-bound inference (the 288 GB lets you fit a 405B model on a single 8×MI355X node where you'd need 16×H100); price-sensitive training at scale.
+
+**Where it loses:** day-one new-architecture support (CUTLASS/Triton on H100/B200 lands first); narrow-niche kernels where vendor patches haven't reached AMD yet.
+
+### Google — TPU v6 (Trillium), v5p
+
+TPU's programming model is fundamentally different from GPU. No threads. No warps. Wide systolic-array MXU operating on tiles you describe with **Pallas + Mosaic** (see [JAX & Pallas](../production/jax-pallas)). The compiler does much more for you; the cost is GCP-only and JAX-mostly.
+
+**Where it shines:** large-scale training, Google-ecosystem deployment, anywhere Pallas is your kernel language anyway.
+
+**Where it doesn't fit:** PyTorch-only stacks (PyTorch/XLA exists but has a longer path); diverse-batch-size serving; anything outside the GCP perimeter.
+
+### Cerebras — WSE-3
+
+A wafer-scale chip: ~900,000 cores, ~44 GB on-chip SRAM (no HBM — the *whole chip* is memory). Programming model is dataflow / streaming; works best for training models that fit in on-chip memory or for inference at very high batch.
+
+**Where it shines:** training small-to-medium models (under ~50B params) very fast; serving for cases where Cerebras's batch-throughput advantage matters.
+
+**Where it doesn't fit:** the kernel DSL story is Cerebras-proprietary; you're learning their stack from scratch. Frontier-scale (>100B params) doesn't fit on-chip.
+
+### Groq — LPU
+
+A deterministic, latency-optimized inference chip. No HBM; everything flows through the on-chip SRAM. The trick: every operation has predictable, batch-independent latency.
+
+**Where it shines:** ultra-low-latency LLM serving (~1 ms TTFT for small models). Used heavily for routing where consistent latency matters more than peak throughput.
+
+**Where it doesn't fit:** training (it's inference-only); large models that don't fit on-chip.
+
+### AWS — Trainium 2
+
+AWS-only training chip. Pricing is competitive with H100; software is the rough edge — Neuron SDK requires meaningful porting effort. Used at Amazon and by frontier labs as a complement to NVIDIA capacity.
+
+**Where it shines:** AWS-only customers training at scale where the cost differential matters more than software polish.
+
+### Apple Neural Engine, Qualcomm Hexagon, ARM Ethos
+
+Edge silicon. Different programming model (no CUDA, no Triton). Accessed via Core ML (Apple), QNN/Hexagon SDK (Qualcomm), ARM NN (ARM). Discussed in detail in the [Edge AI](../../applied/serve/on-device) thread; mentioned here so the data-center picture connects to the device one.
+
+## A side-by-side reference (2026)
+
+| Chip            | Peak FP8 (TFLOPs) | HBM (GB) | HBM BW (TB/s) | TDP (W) | $/hr (cloud, on-demand) | Sweet spot                     |
+|-----------------|-------------------|----------|---------------|---------|-------------------------|--------------------------------|
+| NVIDIA B200     | 4500              | 192      | 8.0           | 1000    | ~$6.0                   | Frontier training + inference  |
+| NVIDIA GB200    | 5000              | 192      | 8.0           | 1200    | ~$8.0                   | Frontier training, NVL72       |
+| NVIDIA H100     | 1979              | 80       | 3.35          | 700     | ~$2.5                   | Mainstream production today    |
+| AMD MI355X      | 5000              | 288      | 8.0           | 1400    | ~$5.5                   | Memory-bound inference; cost   |
+| AMD MI300X      | 2615              | 192      | 5.3           | 750     | ~$3.5                   | H100-tier alternative          |
+| Google TPU v6   | 4500              | 96       | 7.4           | 700     | ~$4.0 (TPU-hour)        | TPU-pod training               |
+| Cerebras WSE-3  | ~12000 (FP16)     | 44 SRAM  | n/a (on-chip) | ~25,000 | varies                  | Specialized training/serving   |
+| Groq LPU        | inference only    | 230 MB SRAM | n/a       | varies  | varies                  | Ultra-low-latency inference    |
+
+Numbers are reasonable April-2026 approximations and will shift as hardware lands and pricing moves; use the [`<CostCalc>`](../../applied/serve/cost-latency) widget for live workload comparisons.
+
+## Picking a chip for a workload
+
+A useful decision-tree:
+
+1. **Training a frontier-scale model (>100B params)?** B200/GB200 (NVL72 cluster) or TPU v6 pod. Frontier labs use both.
+2. **Training a 7B–70B with cost pressure?** MI355X offers the best $/FLOP if your software stack tolerates ROCm.
+3. **Serving a 70B+ model with long context?** MI355X (more HBM = more concurrent users at long context) or B200 if you need software maturity.
+4. **Serving sub-7B or routing heavy?** Groq for the latency win; H100 if you need general-purpose.
+5. **TPU-shop?** TPU v6 + JAX + Pallas. The path is unique but extraordinarily productive.
+6. **Edge AI?** Different lesson tree; see [On-Device Inference](../../applied/serve/on-device).
+
+The decision rarely depends on peak TFLOPs alone. Memory capacity, software maturity, software ecosystem you already use — all matter as much.
+
+## Software-readiness check, per chip
+
+| Chip            | Triton           | CUTLASS        | vLLM        | SGLang      | FlashAttn    | torch.compile |
+|-----------------|------------------|----------------|-------------|-------------|--------------|---------------|
+| H100            | ✓ first-class    | ✓ flagship     | ✓           | ✓           | ✓ FA-3       | ✓             |
+| B200            | ✓ since Triton 3.x| ✓ CUTLASS 4   | ✓ since v1.x| ✓           | ✓ FA-3       | ✓             |
+| MI300X          | ✓ Triton-AMD     | n/a (CK)       | ✓           | ✓           | ✓ AMD ports  | ✓             |
+| MI355X          | ✓ growing        | n/a (CK)       | ✓ since 2025| ✓           | ✓ adapted    | partial       |
+| TPU v6          | n/a (Pallas)     | n/a (Mosaic)   | n/a         | n/a         | Pallas FA    | n/a (JAX)     |
+| Trainium 2      | partial          | n/a            | partial     | partial     | partial      | partial       |
+| Cerebras        | proprietary stack| —              | —           | —           | —            | —             |
+| Groq            | proprietary stack| —              | —           | —           | —            | —             |
+
+The state of this table moves fast. Re-check before any procurement decision.
+
+## What this means for your kernel work
+
+- **If you write Triton:** stick with it, and verify your kernel runs on B200 *and* MI300X/MI355X. Keep the autotune configs broad enough to cover both.
+- **If you write CUTLASS:** you're NVIDIA-only by definition. That's fine for a lot of work but explicitly limits portability.
+- **If you write Pallas:** you have GPU + TPU coverage in one source. Worth the JAX investment if you might end up on TPU.
+- **If you write ThunderKittens:** TK supports H100, B200, and MI300X (the 2024 update). Ahead of CUTLASS for cross-vendor.
+
+The general 2026 strategy: write in **Triton or Pallas first** for portability; reach for **CUTLASS or TK** when the last 5% matters and you've decided on a chip.
+
+## Run it in your browser — workload → recommended chip
+
+<RunInBrowser
+  description="A small recommender. Vary your workload params; see which chip family fits."
+  code={`def recommend(params_b, batch, output_tokens, context_len, prefer_cost):
+    """Return a chip recommendation given workload + preference."""
+    weight_gb = params_b * 0.5             # FP8 weights
+    kv_gb_per_user = (2 * 80 * 8 * 128 * context_len * 2) / 1024**3  # rough Llama-70B-class
+    total_kv = kv_gb_per_user * batch
+    needed_hbm = weight_gb + total_kv
+
+    print(f"  weights (FP8): {weight_gb:.1f} GB")
+    print(f"  kv per user:   {kv_gb_per_user:.2f} GB")
+    print(f"  total kv:      {total_kv:.1f} GB")
+    print(f"  total needed:  {needed_hbm:.1f} GB")
+
+    if needed_hbm > 192 and prefer_cost:
+        return 'AMD MI355X (288 GB) — fits without sharding; cheaper $/hr than B200'
+    if needed_hbm > 192:
+        return 'AMD MI355X (288 GB) or 2x B200 (TP=2 needed for fit)'
+    if needed_hbm > 80 and prefer_cost:
+        return 'AMD MI300X or H100 — both 80–192 GB at lower $/hr'
+    if needed_hbm > 80:
+        return 'B200 (192 GB, fastest single-chip option)'
+    return 'H100 (80 GB) — most software-mature; lowest $/hr at this size'
+
+# Try a few real workloads
+print("Workload: serve 70B FP8 at 16 concurrent users, 32K ctx")
+print("recommendation:", recommend(70, 16, 256, 32768, prefer_cost=True))
+print()
+print("Workload: serve 405B FP8 at 4 users, 8K ctx")
+print("recommendation:", recommend(405, 4, 256, 8192, prefer_cost=False))
+print()
+print("Workload: serve 7B FP8 at 64 users, 4K ctx")
+print("recommendation:", recommend(7, 64, 128, 4096, prefer_cost=True))
+`}
+/>
+
+The numbers are illustrative — real procurement uses richer cost models — but the shape (HBM is the binding constraint; cost vs perf trades on memory size) holds across most LLM workloads.
+
+## Quick check
+
+<FillIn
+  prompt="The AMD chip with 288 GB of HBM, the most of any 2025–2026 single GPU:"
+  answer="MI355X"
+  accept={["mi355x", "mi-355x", "AMD MI355X"]}
+  hint="The successor to MI300X."
+  explanation="MI355X (2025) ships with 288 GB HBM3e — meaningfully more than B200's 192 GB. The capacity advantage matters most for long-context inference and large-model fits without sharding."
+/>
+
+<Quiz
+  question="A team needs to serve a 405B model with 8K context at 16 concurrent users, optimizing for $/token. The most attractive 2026 option:"
+  options={[
+    'H100 cluster with tensor parallelism.',
+    'MI355X — the 288 GB HBM lets one node fit the model + kv cache without TP, lower $/hr than Blackwell, comparable FP8 throughput.',
+    'TPU v6.',
+    'Groq LPU.',
+  ]}
+  answer={1}
+  explanation="At 405B FP8 (~200 GB weights) plus KV cache, MI355X\'s 288 GB-per-GPU HBM means a single node serves the model without tensor-parallel splitting. That removes a tier of communication overhead and packs more concurrent users per dollar than B200. H100 forces TP=2+; TPU v6 doesn\'t fit this software stack; Groq is inference-only and primarily for small models."
+/>
+
+## Key takeaways
+
+1. **2026 is post-NVIDIA-monoculture.** Blackwell, MI355X, TPU v6 are all real; pick per workload.
+2. **Memory capacity often beats raw FLOPs** for LLM inference. MI355X's 288 GB is its real edge.
+3. **Software readiness matters more than peak specs.** Check the Triton / vLLM / FlashAttn matrix before procurement.
+4. **TPU is its own world** — Pallas, JAX, GCP — but extraordinarily productive if you commit.
+5. **Niche silicon** (Cerebras, Groq, Trainium) covers specific workloads (low-latency inference, AWS cost, dataflow training); not general-purpose, but real careers.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'docs', href: 'https://www.nvidia.com/en-us/data-center/blackwell-architecture/', title: 'NVIDIA Blackwell Architecture', note: 'NVIDIA\'s own deep-dive. Section on tensor-memory and 5th-gen tensor cores is the most useful.' },
+    { kind: 'docs', href: 'https://www.amd.com/en/products/accelerators/instinct/mi300/mi355x.html', title: 'AMD Instinct MI355X', note: 'Spec sheet + ROCm software ecosystem links.' },
+    { kind: 'docs', href: 'https://cloud.google.com/tpu/docs/v6e', title: 'Google TPU v6 (Trillium) Documentation', note: 'Hardware spec + Pallas-on-TPU programming guide.' },
+    { kind: 'blog', href: 'https://www.semianalysis.com/', title: 'SemiAnalysis', note: 'The most-current quantitative chip-and-economics analysis on the open web. Subscribe; their MI355X and Blackwell deep-dives are the canonical references.' },
+    { kind: 'blog', href: 'https://hazyresearch.stanford.edu/blog/2024-12-23-tk2', title: 'ThunderKittens 2 — Cross-Vendor', note: 'Hands-on perspective on what porting kernels between H100, B200, and MI300X actually involves.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2104.02934', title: 'Accelerator Programming Models for Diverse Hardware', author: 'Survey, 2021', note: 'Slightly older but still the best framing of the why-so-many-chip-types question.' },
+    { kind: 'docs', href: 'https://aws.amazon.com/machine-learning/trainium/', title: 'AWS Trainium', note: 'Spec + Neuron SDK. Useful if you\'re considering AWS-only training.' },
+    { kind: 'docs', href: 'https://www.cerebras.net/', title: 'Cerebras Systems', note: 'WSE-3 and the dataflow programming model.' },
+    { kind: 'docs', href: 'https://groq.com/', title: 'Groq', note: 'LPU and the deterministic-latency story.' },
+  ]}
+/>
+
+<LessonComplete />
