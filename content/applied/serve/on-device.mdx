@@ -102,13 +102,6 @@ for params_b in [1, 3, 7, 8, 13, 70]:
 
 Rule of thumb: you need ~`params_B × 0.6 GB` for a Q4_K_M model plus ~1 GB headroom. An 8 GB phone can run up to ~7B; 12 GB can run 13B; 70B is desktop-only without aggressive quantization.
 
-## Run it on real hardware
-
-<ColabLink
-  href="https://colab.research.google.com/github/your-github/mosaic-notebooks/blob/main/on-device.ipynb"
-  description="Quantize Llama-3.2-3B to Q4_K_M, run inference, measure tok/s on Colab CPU. Then we walk through getting it onto your phone."
-/>
-
 ## Quick check
 
 <Quiz

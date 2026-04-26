@@ -1,0 +1,74 @@
+---
+title: Compiler Foundation
+description: LLVM IR, passes, MLIR, dialects, lowering — the substrate every modern AI compiler is built on.
+---
+
+# Compiler Foundation
+
+Every AI compiler ultimately emits machine code. The chain from your Python model to that machine code goes through one or two intermediate representations — usually MLIR (with multiple dialects) and then LLVM. This module is the substrate: what those IRs are, how passes transform them, and how lowering walks a program down to hardware.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/compilers/foundation/llvm-ir', title: 'LLVM IR Tour', estMin: 14 },
+    { slug: '/compilers/foundation/passes', title: 'Passes & Pipelines', estMin: 14 },
+    { slug: '/compilers/foundation/mlir-overview', title: 'MLIR Overview', estMin: 16 },
+    { slug: '/compilers/foundation/lowering', title: 'Dialects & Lowering', estMin: 16 },
+  ]}
+/>
+
+<Capstone
+  title="Write your first MLIR pass — fuse two operations"
+  pitch="The MLIR ecosystem stops being mysterious the day you watch your own pass rewrite an IR dump."
+  what="Build LLVM + MLIR from source, write a transformation pass in MLIR's pass framework that fuses an `arith.addf` followed by an `arith.mulf` into a single `arith.fma` (fused multiply-add). Run it on a small program; inspect the IR before and after. The artifact is the pass, a test, and an `opt -before -after` diff."
+  sota={['LLVM 18+', 'MLIR (LLVM tree)', 'CMake', 'mlir-opt + FileCheck for testing', 'a small linalg program as input']}
+  device="laptop"
+  time="One focused weekend (~12 h, mostly the LLVM build)"
+  level="advanced"
+  steps={[
+    {
+      title: 'Build LLVM + MLIR locally',
+      goal: 'Clone llvm-project. Configure with CMake using `-DLLVM_ENABLE_PROJECTS=mlir`. Build (this takes 1–2 hours; let it run while you read).',
+      checkpoint: 'You can run `mlir-opt --help` and see the list of available passes. `mlir-translate` is also on PATH.',
+      trap: 'Building all of LLVM unnecessarily eats a day. Set `-DLLVM_TARGETS_TO_BUILD=X86;NVPTX` to skip targets you don\'t need.',
+      est: '120 min',
+    },
+    {
+      title: 'Author the smallest possible MLIR program',
+      goal: 'Write a `.mlir` file with a `func.func` that does `%c = arith.addf %a, %b : f32` then `%d = arith.mulf %c, %e : f32`. This is the input your pass will rewrite.',
+      checkpoint: 'Running `mlir-opt program.mlir` echoes back valid MLIR.',
+      est: '20 min',
+    },
+    {
+      title: 'Skeleton a transformation pass',
+      goal: 'In a new directory: write a `Pass.cpp` registering a pass class deriving from `OperationPass<func::FuncOp>`. Use the new pass-manager registration macros. Build it as a shared library (`MyPass.so`).',
+      checkpoint: '`mlir-opt --load=./MyPass.so --my-pass program.mlir` runs, even if the pass does nothing yet.',
+      trap: 'MLIR API churns: ensure your tutorial source is for the same MLIR version as your build. Pre-2024 examples rarely compile against current main.',
+      est: '60 min',
+    },
+    {
+      title: 'Pattern-match and rewrite addf+mulf → fma',
+      goal: 'Use `RewritePatternSet` and `OpRewritePattern<arith::MulFOp>`. In `matchAndRewrite`, check that the multiplicand is the result of an `arith::AddFOp`. If so, rewrite to `arith::FmaOp`. Run greedy pattern application.',
+      checkpoint: 'Before pass: 2 ops. After pass: 1 op. `mlir-opt --my-pass program.mlir` shows the transformation.',
+      trap: 'Forgetting to check that the addf result has only one use — if it\'s used elsewhere, you can\'t fuse without duplicating.',
+      est: '120 min',
+    },
+    {
+      title: 'Add a FileCheck test',
+      goal: 'Write a `.mlir` test file with `// RUN: mlir-opt %s --my-pass | FileCheck %s` and `// CHECK-NOT: arith.addf` plus `// CHECK: arith.fma` directives. Add to a `lit` test config and run.',
+      checkpoint: '`lit` reports PASS for your test.',
+      est: '40 min',
+    },
+    {
+      title: 'Push to GitHub',
+      goal: 'Repo with `Pass.cpp`, `program.mlir`, `test/fuse.mlir`, `CMakeLists.txt`, `README.md` linking to MLIR docs and explaining what the pass does in two paragraphs.',
+      checkpoint: 'A reader who has MLIR built can clone, `cmake --build .`, run the pass, and see the IR change.',
+      est: '40 min',
+    },
+  ]}
+  outcomes={[
+    'A working out-of-tree MLIR pass — your first real compiler engineering artifact',
+    'Fluency with `mlir-opt`, FileCheck, and the lit testing framework',
+    'A built copy of LLVM + MLIR — the foundation for any future compiler work',
+    'The mental model that lets you read MLIR dumps from torch.compile, IREE, JAX, etc.',
+  ]}
+/>

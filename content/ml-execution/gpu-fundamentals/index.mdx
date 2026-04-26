@@ -9,18 +9,67 @@ GPUs are not just "fast CPUs". They're a different machine with a different cost
 
 <ModuleProgress
   lessons={[
+    { slug: '/ml-execution/gpu-fundamentals/sm-architecture', title: 'SM Architecture', estMin: 14 },
+    { slug: '/ml-execution/gpu-fundamentals/thread-hierarchy', title: 'Thread Hierarchy', estMin: 12 },
+    { slug: '/ml-execution/gpu-fundamentals/shared-memory', title: 'Shared Memory', estMin: 14 },
     { slug: '/ml-execution/gpu-fundamentals/gemm', title: 'GEMM (Hopper / Blackwell)', estMin: 18 },
   ]}
 />
 
-> More lessons coming: SM & Warp Architecture · Thread Hierarchy · Shared Memory
-
 <Capstone
   title="Beat cuBLAS at small-N GEMM in Triton"
-  pitch="Write a tiled matmul kernel that outperforms cuBLAS for matrices ≤ 2048×2048 — and ship the proof."
-  what="Implement a Triton kernel for 16-bit GEMM with shared-memory tiling, warp-level mma, and autotuning. Benchmark vs cuBLAS across N = 256, 512, 1024, 2048. Use ncu to inspect the issued instructions and confirm you're hitting tensor cores."
-  sota={['Triton 3.x', 'CUDA 12+', 'ncu (Nsight Compute)', 'CUTLASS reference', 'tensor cores (mma.sync)']}
+  pitch="A tiled matmul kernel that outperforms cuBLAS on the shapes that matter for LLM decode."
+  what="A single-file Triton kernel that hits 80–95% of cuBLAS at N=4096 and beats it at N=512–1024 (the small-N regime cuBLAS doesn't tune for). The artifact is the kernel + an ncu profile showing tensor-core utilization + a benchmark plot vs cuBLAS + a one-page README explaining the tile choice."
+  sota={['Triton 3.x (autotune)', 'CUDA 12+', 'ncu (Nsight Compute)', 'CUTLASS reference', 'tensor cores (mma.sync)', 'matplotlib for benchmark plot']}
   device="colab"
-  time="One weekend"
+  time="One focused weekend (~10 h)"
   level="advanced"
+  steps={[
+    {
+      title: 'Set up Colab + verify GPU access',
+      goal: 'Open a free T4 Colab. Install Triton (pre-installed in PyTorch 2.x), run `nvidia-smi`, run a hello-world Triton kernel that doubles a vector.',
+      checkpoint: 'You see "Tesla T4" or "L4" in nvidia-smi output and your hello-world kernel prints the doubled tensor.',
+      est: '15 min',
+    },
+    {
+      title: 'Write a naive matmul kernel — block per output tile',
+      goal: 'Write the canonical Triton matmul: each program computes one BLOCK_M × BLOCK_N tile of C, looping over K in chunks of BLOCK_K. Use BLOCK_M = BLOCK_N = 64, BLOCK_K = 32. Start with FP16 inputs, FP32 accumulator.',
+      checkpoint: 'Output matches `torch.matmul(A, B)` to atol=1e-2 for random N=512 matrices.',
+      trap: 'Forgetting `mask=` on `tl.load` for the boundary tiles when M, N, K are not multiples of the block size — silent garbage values.',
+      est: '60 min',
+    },
+    {
+      title: 'Add Triton autotune across tile shapes',
+      goal: 'Wrap the kernel in `@triton.autotune` with 6–8 configs varying (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages). Triton picks the winner per shape automatically on first run.',
+      checkpoint: 'Re-run benchmark; throughput jumps 1.3–2× without changing the kernel body. Print the chosen config to confirm autotune is working.',
+      trap: 'Autotune cache is per-shape — vary M/N/K in the benchmark loop or you’ll get one config compiled for one shape.',
+      est: '45 min',
+    },
+    {
+      title: 'Benchmark vs cuBLAS at N = 256, 512, 1024, 2048, 4096',
+      goal: 'Use `torch.cuda.Event` for accurate timing. Run each shape 50× after a 10-iter warmup. Plot tokens/s (or TFLOPs) of your kernel vs `torch.matmul` (which dispatches to cuBLAS).',
+      checkpoint: 'You have a matplotlib plot with two curves and clear axis labels. Your kernel beats cuBLAS at N ≤ 1024.',
+      trap: 'Forgetting to `.cuda.synchronize()` before stopping the timer — you’ll measure launch latency instead of execution time.',
+      est: '60 min',
+    },
+    {
+      title: 'Profile with ncu and confirm tensor cores',
+      goal: 'Run `ncu --set full --kernel-name your_kernel python bench.py`. Look for `sm__pipe_tensor_op_cycles_active.avg.pct_of_peak_sustained_active` — should be 50%+ at large N. Note the L1/L2 hit rates and SMEM bank conflicts.',
+      checkpoint: 'You can point at the ncu line that proves tensor cores are running. Bank conflicts are zero or near-zero.',
+      trap: 'ncu requires sudo on bare-metal Colab; use the `--launch-skip` flag if your kernel runs many times before the one you care about.',
+      est: '60 min',
+    },
+    {
+      title: 'Push to GitHub with a clean README',
+      goal: 'Single-file repo: `kernel.py` (Triton kernel + autotune), `bench.py` (benchmark + plot), `README.md` (one paragraph explaining the win and the ncu screenshot).',
+      checkpoint: 'A stranger can clone, run `pip install triton torch matplotlib && python bench.py`, and reproduce your plot in 5 minutes.',
+      est: '60 min',
+    },
+  ]}
+  outcomes={[
+    'A working Triton kernel that beats cuBLAS on a real shape range',
+    'Fluency reading ncu output — tensor-core utilization, bank conflicts, occupancy',
+    'A reproducible benchmarking workflow for future kernel work',
+    'A clean GitHub repo someone else can clone, run, and reproduce in 5 minutes',
+  ]}
 />

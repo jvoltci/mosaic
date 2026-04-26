@@ -40,7 +40,7 @@ mosaic/
 │   ├── RunInBrowser.tsx          Pyodide Python in the browser
 │   ├── Capstone.tsx              "Build it" cards on module index pages
 │   ├── SupportSection.tsx        Tip jar (landing only)
-│   └── ...                       Quiz · Resources · ColabLink · ModuleProgress · etc.
+│   └── ...                       Quiz · Resources · ModuleProgress · etc.
 ├── content/                      All lessons as MDX + _meta.ts sidebar order
 │   ├── index.mdx                 Landing
 │   ├── cheatsheet.mdx            Auto-rendered cheatsheet
@@ -88,7 +88,6 @@ Then wire it in three places:
 | `<LessonComplete>` | "Mark complete" button (localStorage) |
 | `<ModuleProgress lessons={[...]}>` | Lesson list + progress bar (use on module index pages) |
 | `<RunInBrowser code={\`...\`}>` | Pyodide Python that runs in the browser, on phone too |
-| `<ColabLink href=...>` | Big CTA card linking to a real Colab notebook (don't use placeholder URLs) |
 | `<Resources items={[{kind, href, title, author, note}]}>` | Linked references — `kind` ∈ paper/blog/video/repo/docs/book |
 | `<Capstone title= pitch= what= sota=[] device= time= level=>` | End-of-module "build it" project card |
 | ` ```mermaid ` | Diagrams — themed to brand by `components/Mermaid.tsx` |

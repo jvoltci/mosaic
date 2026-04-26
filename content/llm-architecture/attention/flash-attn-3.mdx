@@ -116,13 +116,6 @@ print("identical?", all(abs(a-b) < 1e-9 for a, b in zip(standard_softmax(scores)
 
 The ~7 lines of running-max-and-sum logic is the *entire mathematical insight* of FlashAttention. Everything else is GPU engineering.
 
-## Run it on real hardware
-
-<ColabLink
-  href="https://colab.research.google.com/github/your-github/mosaic-notebooks/blob/main/flash-attention.ipynb"
-  description="Benchmark naive PyTorch attention vs torch.nn.functional.scaled_dot_product_attention (which calls FA-2 under the hood) on a Colab T4. Watch HBM traffic drop."
-/>
-
 ## Quick check
 
 <Quiz

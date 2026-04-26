@@ -1,9 +1,12 @@
 ---
 title: GQA, MQA & MLA
 description: Sharing K/V heads to fit longer contexts — and DeepSeek's 10× cache compression via Multi-head Latent Attention.
+last_reviewed: 2026-04-26
 ---
 
 # GQA, MQA & MLA
+
+> **Prereq:** [Multi-Head Attention](./mha) — every variant on this page is a way to *not* store one (K, V) pair per Q head. If MHA isn't in your head, read that first.
 
 ## TL;DR
 
@@ -51,13 +54,13 @@ $$
 \text{cache} = 2 \times L \times H \times d_{\text{head}} \times T \times \text{bytes}
 $$
 
-For Llama-2 70B (MHA, $H = 64, d_h = 128, L = 80$) at $T = 8192$, BF16:
+For a hypothetical Llama-1 65B-class config ($H = 64, d_h = 128, L = 80$) at $T = 8192$, BF16, **if it had used MHA at this size**:
 
 $$
 2 \times 80 \times 64 \times 128 \times 8192 \times 2 \approx 21\text{ GB / sequence}
 $$
 
-This is why pre-2023 models maxed out around 4K context.
+That's the kind of number that kept pre-2023 models below 4K context. Llama-2 70B was the inflection — it shipped with GQA precisely to dodge this wall.
 
 ### GQA fixes most of this
 
@@ -116,8 +119,9 @@ DeepSeek showed (V2, May 2024) and confirmed (V3, Dec 2024) that MLA matches or 
 
 | Model family | Attention | $H_q / H_{kv}$ |
 | --- | --- | --- |
-| Llama-1 / Llama-2 7B | MHA | 32 / 32 |
-| Llama-2 70B | MHA | 64 / 64 |
+| Llama-1 7B / 65B | MHA | 32 / 32, 64 / 64 |
+| Llama-2 7B | MHA | 32 / 32 |
+| Llama-2 70B | GQA | 64 / 8 |
 | **Llama-3 / 3.1 70B** | **GQA** | 64 / 8 |
 | **Mistral 7B / Mixtral** | **GQA** | 32 / 8 |
 | **Qwen-2.5 / Qwen-3** | **GQA** | varies, typ. group=4–8 |
@@ -160,6 +164,13 @@ for label, mode, L, H_q, H_kv, d_head in configs:
 You should see GQA cut MHA by ~8× and MLA cut another ~10× on top — the headline numbers from the DeepSeek-V3 paper.
 
 ## Quick check
+
+<FillIn
+  prompt="The reciprocal of compression. If Llama-3 70B uses 64 query heads and 8 KV heads, the GQA group size is:"
+  answer="8"
+  hint="64 / 8."
+  explanation="Group size = n_query_heads / n_kv_heads. Each KV head is shared across 8 query heads."
+/>
 
 <Quiz
   question="DeepSeek-V3 ships with MLA. What's the *primary* tradeoff this introduces vs GQA?"

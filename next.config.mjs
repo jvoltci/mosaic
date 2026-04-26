@@ -14,6 +14,11 @@ const withNextra = nextra({
   search: { codeblocks: false },
   defaultShowCopyCode: true,
   latex: true,
+  mdxOptions: {
+    rehypePrettyCodeOptions: {
+      theme: 'one-dark-pro',
+    },
+  },
 })
 
 export default withNextra({

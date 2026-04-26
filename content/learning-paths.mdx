@@ -1,0 +1,93 @@
+---
+title: Reading Orders
+description: Three coherent paths through Mosaic. Pick the thread closest to the work you do.
+---
+
+# Reading Orders
+
+Mosaic isn't meant to be read end-to-end (though you can). The lessons are designed to compose. Below are the three orders that form the most coherent arcs through the material — each is a thread you can pull and end up with a real working understanding of one corner of modern AI systems.
+
+There is no required order. Lessons stand alone. Most learners follow a thread for a while, branch into a related one, come back. Use the [course map](/map) to see the whole graph.
+
+---
+
+## I. AI Systems
+
+Attention, the KV cache, the inference pipeline, the serving stack.
+
+1. [Multi-Head Attention](/llm-architecture/attention/mha)
+2. [GQA, MQA & MLA](/llm-architecture/attention/gqa-mqa-mla)
+3. [RoPE + YaRN / LongRoPE](/llm-architecture/attention/rope-yarn)
+4. [FlashAttention-3](/llm-architecture/attention/flash-attn-3)
+5. [KV Cache Basics](/llm-architecture/kv-cache/kv-basics)
+6. [PagedAttention](/llm-architecture/kv-cache/paged-attention)
+7. [Prefix & RadixAttention](/llm-architecture/kv-cache/prefix-radix)
+8. [Disaggregated Serving](/llm-architecture/kv-cache/disaggregated)
+9. [Sampling](/llm-architecture/inference-time/sampling)
+10. [Structured Output](/llm-architecture/inference-time/structured-output)
+11. [Chunked Prefill](/llm-architecture/inference-time/chunked-prefill)
+12. [Speculative Decoding](/llm-architecture/inference-time/spec-decoding)
+13. [vLLM & SGLang](/applied/serve/vllm-sglang)
+14. [Cost & Latency](/applied/serve/cost-latency)
+15. [Observability](/applied/serve/observability)
+
+The capstone in [Inference-Time Architecture](/llm-architecture/inference-time) — a 200-line continuous-batching server — is the artifact this thread is built around.
+
+---
+
+## II. ML Compilers & Kernels
+
+GPUs from the silicon up; the compilers and DSLs that target them.
+
+1. [SM Architecture](/ml-execution/gpu-fundamentals/sm-architecture)
+2. [Thread Hierarchy](/ml-execution/gpu-fundamentals/thread-hierarchy)
+3. [Shared Memory](/ml-execution/gpu-fundamentals/shared-memory)
+4. [GEMM (Hopper / Blackwell)](/ml-execution/gpu-fundamentals/gemm)
+5. [Strides & Layout](/ml-execution/tensors-in-memory/strides-and-layout) *(coming)*
+6. [TMA & cp.async](/ml-execution/tensors-in-memory/tma-async-copy) *(coming)*
+7. [LLVM IR Tour](/compilers/foundation/llvm-ir) *(coming)*
+8. [Passes & Pipelines](/compilers/foundation/passes) *(coming)*
+9. [MLIR Overview](/compilers/foundation/mlir-overview) *(coming)*
+10. [Dialects & Lowering](/compilers/foundation/lowering) *(coming)*
+11. [torch.compile](/compilers/tvm-and-xla/torch-compile)
+12. [Triton](/compilers/kernels/triton) *(coming)*
+13. [CuTe & CUTLASS 4](/compilers/kernels/cute-cutlass) *(coming)*
+14. [ThunderKittens & TileLang](/compilers/kernels/thunderkittens) *(coming)*
+15. [Operator Fusion](/compilers/production/operator-fusion) *(coming)*
+16. [JAX & Pallas](/compilers/production/jax-pallas) *(coming)*
+17. [Hardware Landscape 2026](/compilers/kernels/hardware-landscape) *(coming)*
+
+The capstone — [a Triton kernel that beats cuBLAS at small-N GEMM](/ml-execution/gpu-fundamentals) — is the artifact. The build guide on that page walks you through it step by step.
+
+---
+
+## III. Edge AI
+
+Quantization, on-device runtimes, NPUs. The part of the field that runs without the cloud.
+
+1. [FP8 Inference](/ml-execution/quantization/fp8-overview) *(coming)*
+2. [INT4 / AWQ / GPTQ](/ml-execution/quantization/int4-and-awq) *(coming)*
+3. [MXFP4 / NVFP4](/ml-execution/quantization/mxfp4-nvfp4) *(coming)*
+4. [Rotation Quantization](/ml-execution/quantization/rotation-quant) *(coming)*
+5. [On-Device Inference](/applied/serve/on-device)
+6. [llama.cpp Internals](/edge-ai/on-device/llama-cpp-internals) *(coming — new track)*
+7. [ExecuTorch](/edge-ai/on-device/executorch) *(coming — new track)*
+8. [Core ML & Apple Neural Engine](/edge-ai/on-device/coreml) *(coming — new track)*
+9. [Qualcomm Hexagon](/edge-ai/npu/hexagon) *(coming — new track)*
+10. [GGUF & i-matrix](/edge-ai/quantization/gguf-and-imatrix) *(coming — new track)*
+11. [Distillation for Edge](/edge-ai/distillation/small-llms) *(coming — new track)*
+
+The capstone — running a 4-bit Qwen2.5-3B in airplane mode on your phone — sits on the [On-Device Inference](/applied/serve/on-device) page.
+
+The Edge AI track is being filled in actively. Lessons marked *(coming)* are next on the writing schedule; check the [course map](/map) — tiles fill in as lessons land.
+
+---
+
+## A few notes on how to use this
+
+- **Lessons stand alone.** If a prerequisite is missing in your head, the lesson links to it at the top. Read the prereq, come back.
+- **Capstones are optional but worth it.** Each module has one. They're sized for a focused weekend and produce a working artifact (a kernel, a benchmark, an app, a server). The build guide is on the module index page.
+- **The cheatsheet is the speedrun.** Every lesson's TL;DR aggregates into [/cheatsheet](/cheatsheet) — useful for refreshing a concept without re-reading.
+- **The map is the index.** [/map](/map) shows every lesson, completed and remaining, organized by track.
+
+If a lesson is unclear or wrong, [open an issue](https://github.com/jvoltci/mosaic/issues). Mosaic is built openly; corrections land within days.

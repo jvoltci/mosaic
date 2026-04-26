@@ -83,13 +83,6 @@ for name, *args in configs:
 
 A few things this should make obvious: (1) batch and context length both blow up the cache linearly; (2) at long contexts on a big model, the cache is the binding constraint; (3) the `n_kv_heads` parameter (GQA) is doing enormous work — DeepSeek's MLA squeezes this further.
 
-## Run it on real hardware
-
-<ColabLink
-  href="https://colab.research.google.com/github/your-github/mosaic-notebooks/blob/main/kv-cache.ipynb"
-  description="Allocate a real KV cache with PyTorch on a Colab T4, watch GPU memory climb token by token."
-/>
-
 ## Quick check
 
 <Quiz

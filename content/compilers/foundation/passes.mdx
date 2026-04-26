@@ -1,0 +1,299 @@
+---
+title: Passes & Pipelines
+description: How LLVM optimizations actually run — analyses, transformations, the new pass manager, and the pipeline that's behind every -O2.
+last_reviewed: 2026-04-26
+---
+
+# Passes & Pipelines
+
+> **Prereq:** [LLVM IR Tour](./llvm-ir). Passes operate on the IR.
+
+## TL;DR
+
+- An LLVM **pass** is a function that reads or rewrites IR. Two flavors: **analysis** passes (compute information about the IR, like dominator trees or alias info) and **transformation** passes (rewrite IR, like inlining or dead-code elimination).
+- Passes compose into a **pipeline**. `-O0` is empty; `-O2` is ~150 passes; `-O3` adds aggressive vectorization. Each pass assumes the previous ones ran.
+- LLVM 14+ uses the **New Pass Manager** (NPM). Old `legacy::PassManager` is deprecated; new code uses `PassBuilder` + `ModulePassManager`. The migration matters because tutorials older than 2022 are usually wrong.
+- **Analysis passes are cached and invalidated**: if a transformation changes the IR, dependent analyses get re-run lazily. This is what makes pipelines fast.
+- The single most useful flag for understanding a pipeline: `opt --print-after-all` — dumps IR after every pass. Scary the first time; indispensable forever after.
+
+## Why this matters
+
+Your code being fast or slow is largely a function of which passes ran on it and in what order. Inlining unlocks constant folding which unlocks dead-code elimination which unlocks register allocation. Skip inlining and the rest doesn't fire. **Compilers aren't single-shot transformations — they're pipelines of cooperating passes**, each enabling the next. Knowing the pipeline is what separates "the compiler is magic" from "I can debug why this didn't get optimized."
+
+## Mental model
+
+```mermaid
+flowchart LR
+  IR1["IR"] --> P1["instcombine"]
+  P1 --> IR2["IR'"]
+  IR2 --> P2["simplifycfg"]
+  P2 --> IR3["IR''"]
+  IR3 --> P3["sroa"]
+  P3 --> IR4["IR'''"]
+  IR4 --> P4["..."]
+  P4 --> Dots["~150 more"]
+  Dots --> Final["IR ready for codegen"]
+```
+
+Each pass takes IR, returns IR (slightly different). Some are no-ops on a given input; some unlock major changes. The whole `-O2` pipeline is around 150 such steps.
+
+## Concrete walkthrough
+
+### Two kinds of passes
+
+**Analysis passes** compute information without changing IR:
+
+| Analysis              | What it computes                                           |
+|-----------------------|------------------------------------------------------------|
+| DominatorTree         | Which blocks dominate which (used by SSA construction, GVN)|
+| LoopAnalysis          | The loop nest structure                                    |
+| AliasAnalysis         | Whether two pointers may point to the same memory          |
+| ScalarEvolution       | Closed-form expressions for loop induction variables       |
+| BranchProbabilityInfo | Likely-taken edges (for layout)                            |
+
+**Transformation passes** rewrite IR using analyses:
+
+| Transformation            | What it does                                              |
+|---------------------------|----------------------------------------------------------|
+| `mem2reg` / `sroa`        | Promote `alloca`s into SSA registers                     |
+| `instcombine`             | Local algebraic simplification (e.g. `x*1 → x`, `x+0 → x`) |
+| `simplifycfg`             | Merge basic blocks, eliminate trivial branches            |
+| `gvn`                     | Global value numbering — eliminate redundant computations |
+| `licm`                    | Loop-invariant code motion (hoist out of loops)           |
+| `inliner`                 | Inline function calls                                      |
+| `loop-vectorize`          | Turn loops into SIMD vector ops                            |
+| `dce`, `adce`             | Dead code elimination                                      |
+
+The pipeline is essentially: **promote memory to registers → simplify → inline → propagate → simplify again → vectorize → simplify again → emit code**.
+
+### How `-O0` becomes `-O2`
+
+Recall the `-O0` `add` from the previous lesson:
+
+```llvm
+define i32 @add(i32 %0, i32 %1) {
+  %3 = alloca i32
+  %4 = alloca i32
+  store i32 %0, ptr %3
+  store i32 %1, ptr %4
+  %5 = load i32, ptr %3
+  %6 = load i32, ptr %4
+  %7 = add nsw i32 %5, %6
+  ret i32 %7
+}
+```
+
+The optimizer turns this into:
+
+```llvm
+define i32 @add(i32 %0, i32 %1) {
+  %3 = add nsw i32 %1, %0
+  ret i32 %3
+}
+```
+
+The exact pass sequence:
+
+1. **`mem2reg`** sees `alloca i32` whose only uses are `store`/`load`, promotes both to SSA registers. Now there are no `alloca`s.
+2. **`instcombine`** eliminates dead `store/load` pairs (the value flows directly).
+3. **`simplifycfg`** has nothing to do here (no branches), but in larger functions it cleans up.
+4. **`adce`** sweeps any leftover dead instructions (none).
+
+You can watch this happen yourself: `opt -O2 -print-after-all add.ll 2>&1 | less` — every pass prints "IR after `<pass>`" so you see exactly which one fired.
+
+### The New Pass Manager (NPM)
+
+Every LLVM tutorial older than 2022 uses the **legacy** pass manager. Don't follow them. The current way:
+
+```cpp
+#include "llvm/Passes/PassBuilder.h"
+
+PassBuilder PB;
+
+ModuleAnalysisManager MAM;
+FunctionAnalysisManager FAM;
+LoopAnalysisManager LAM;
+CGSCCAnalysisManager CGAM;
+
+PB.registerModuleAnalyses(MAM);
+PB.registerFunctionAnalyses(FAM);
+PB.registerLoopAnalyses(LAM);
+PB.registerCGSCCAnalyses(CGAM);
+PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+ModulePassManager MPM = PB.buildPerModuleDefaultPipeline(OptimizationLevel::O2);
+MPM.run(*module, MAM);
+```
+
+Or equivalently from the command line: `opt -passes='default<O2>'`. Specify individual passes: `opt -passes='instcombine,simplifycfg,gvn'`.
+
+The NPM is faster, has cleaner pass dependencies, and supports adaptors (run a function pass over every function in a module, etc.). Memorize the `PassBuilder` ↔ `opt -passes=` correspondence — every modern LLVM tutorial uses one or the other.
+
+### Writing your first transformation pass
+
+Skeleton of an out-of-tree NPM pass:
+
+```cpp
+#include "llvm/Pass.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
+
+using namespace llvm;
+
+struct MultiplyByZeroPass : PassInfoMixin<MultiplyByZeroPass> {
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM) {
+    bool changed = false;
+    for (auto &BB : F)
+      for (auto It = BB.begin(); It != BB.end(); ) {
+        auto *Inst = &*It++;
+        // Match: %x = mul i32 %a, 0 → %x = i32 0
+        if (auto *Mul = dyn_cast<BinaryOperator>(Inst);
+            Mul && Mul->getOpcode() == Instruction::Mul) {
+          if (auto *C = dyn_cast<ConstantInt>(Mul->getOperand(1));
+              C && C->isZero()) {
+            Mul->replaceAllUsesWith(C);
+            Mul->eraseFromParent();
+            changed = true;
+          }
+        }
+      }
+    return changed ? PreservedAnalyses::none() : PreservedAnalyses::all();
+  }
+};
+
+extern "C" PassPluginLibraryInfo llvmGetPassPluginInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "MultiplyByZero", "v0.1",
+    [](PassBuilder &PB) {
+      PB.registerPipelineParsingCallback(
+        [](StringRef Name, FunctionPassManager &FPM, ...) {
+          if (Name == "mult-zero") { FPM.addPass(MultiplyByZeroPass()); return true; }
+          return false;
+        });
+    }};
+}
+```
+
+Build it as a shared library and run: `opt -load-pass-plugin=./MultZero.so -passes='mult-zero' input.ll -S`. This is the same pattern as the [module capstone](./index) — only the matched pattern differs.
+
+### Why `instcombine` would have caught this anyway
+
+`instcombine` already implements `x*0 → 0`. Real production passes look for transformations the standard pipeline misses — domain-specific opportunities (e.g., recognizing a particular LLM-kernel idiom and lowering it differently), or new hardware idioms.
+
+The lesson: **passes compose. The interesting work is finding combinations the existing pipeline misses, or finding optimizations that need cross-function/cross-module visibility.**
+
+## Run it in your browser — toy pass pipeline
+
+<RunInBrowser
+  description="A mini optimizer running three passes (constant fold → DCE → algebraic simplify) over a list-of-instructions IR."
+  code={`def is_const(v): return isinstance(v, int)
+
+def constant_fold(prog):
+    """If both operands are constants, replace with the result."""
+    out = []
+    env = {n: v for (op, n, *_) in prog if op == 'const' for v in [_[0]]}
+    for instr in prog:
+        if instr[0] == 'add' and is_const(env.get(instr[2])) and is_const(env.get(instr[3])):
+            v = env[instr[2]] + env[instr[3]]
+            env[instr[1]] = v
+            out.append(('const', instr[1], v))
+        else:
+            out.append(instr)
+            if instr[0] == 'const':
+                env[instr[1]] = instr[2]
+    return out
+
+def dce(prog):
+    """Remove instructions whose result is never used."""
+    used = set()
+    for op, name, *args in prog:
+        for a in args:
+            if isinstance(a, str): used.add(a)
+    return [i for i in prog if i[0] == 'ret' or i[1] in used]
+
+def algebraic(prog):
+    """x + 0 -> x; x * 0 -> 0; x * 1 -> x."""
+    out = []
+    env = {n: v for (op, n, *rest) in prog if op == 'const' for v in [rest[0]]}
+    rewrites = {}
+    for instr in prog:
+        if instr[0] == 'add' and env.get(instr[3]) == 0:
+            rewrites[instr[1]] = instr[2]
+            continue
+        if instr[0] == 'mul' and env.get(instr[3]) == 0:
+            out.append(('const', instr[1], 0)); continue
+        if instr[0] == 'mul' and env.get(instr[3]) == 1:
+            rewrites[instr[1]] = instr[2]
+            continue
+        out.append(tuple(rewrites.get(a, a) if isinstance(a, str) else a for a in instr))
+    return out
+
+prog = [
+    ('const', 'a', 5),
+    ('const', 'b', 0),
+    ('add',   'c', 'a', 'b'),       # c = a + 0 → c = a
+    ('mul',   'd', 'c', 'a'),       # d = c * a → d = a * a
+    ('const', 'one', 1),
+    ('mul',   'e', 'd', 'one'),     # e = d * 1 → e = d
+    ('const', 'zero', 0),
+    ('mul',   'f', 'e', 'zero'),    # f = e * 0 → f = 0
+    ('ret',   None, 'f'),
+]
+
+def show(label, p):
+    print(f"\\n--- {label} ({len(p)} instructions) ---")
+    for i in p: print(f"  {i}")
+
+show("input", prog)
+prog = algebraic(prog);  show("after algebraic", prog)
+prog = constant_fold(prog); show("after constant_fold", prog)
+prog = dce(prog);          show("after dce", prog)
+`}
+/>
+
+You should see the program shrink dramatically as each pass fires — exactly what watching `opt -print-after-all` looks like, in miniature.
+
+## Quick check
+
+<FillIn
+  prompt="The flag that prints LLVM IR after every pass:"
+  answer="-print-after-all"
+  accept={["--print-after-all", "print-after-all"]}
+  hint="It's the canonical debugging flag for any compiler-IR question."
+  explanation="`opt -O2 -print-after-all input.ll 2>&1 | less` is the universal first move when investigating why an optimization did or didn't fire. Pair it with `-print-changed=quiet` to skip passes that didn't modify the IR."
+/>
+
+<Quiz
+  question="A compiler engineer writes a new transformation pass. They run it directly on `clang -O0` output and see no improvement. Most likely cause:"
+  options={[
+    'The pass has a bug.',
+    'They didn\'t run mem2reg first — their pattern can\'t fire on IR that still has alloca/load/store everywhere.',
+    'LLVM is too old.',
+    'The pass needs to be a module-level pass.',
+  ]}
+  answer={1}
+  explanation="Almost every interesting transformation pass assumes earlier-pipeline passes (especially mem2reg / sroa) have already promoted memory to SSA registers. Running on raw -O0 IR means everything is alloca/load/store, and most patterns won't match. Run `opt -O1` first or compose your pass after mem2reg explicitly."
+/>
+
+## Key takeaways
+
+1. **A pass takes IR, returns IR.** Two kinds: analyses (read-only) and transformations (rewrite).
+2. **Pipelines compose.** `-O2` is ~150 passes; each enables the next.
+3. **New Pass Manager (NPM) is the current API.** Tutorials before 2022 use the legacy one — don't.
+4. **`opt -print-after-all` is the universal debugging tool** for any "why did/didn't this optimize" question.
+5. **Most interesting work is at pass *interactions*** — finding sequences the standard pipeline misses or domain-specific rewrites the pipeline doesn't know about.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'docs', href: 'https://llvm.org/docs/NewPassManager.html', title: 'LLVM — Using the New Pass Manager', note: 'Authoritative. Includes the migration guide from legacy passes.' },
+    { kind: 'docs', href: 'https://llvm.org/docs/Passes.html', title: 'LLVM — All Passes', note: 'Reference for every pass in the tree. Skim once to know what\'s on offer.' },
+    { kind: 'docs', href: 'https://llvm.org/docs/WritingAnLLVMNewPMPass.html', title: 'Writing an LLVM Pass (NPM)', note: 'The official walkthrough for an out-of-tree NPM pass — what the module capstone is built around.' },
+    { kind: 'blog', href: 'https://blog.llvm.org/posts/2021-03-26-the-new-pass-manager/', title: 'The New Pass Manager', author: 'LLVM blog, 2021', note: 'Why NPM exists; the design tradeoffs vs legacy. Useful background.' },
+    { kind: 'blog', href: 'https://homes.cs.washington.edu/~bornholt/post/llvm-2017.html', title: 'LLVM Optimizations You Should Know', author: 'James Bornholt', note: 'Concise tour of the most-impactful passes with worked examples.' },
+    { kind: 'repo', href: 'https://github.com/banach-space/llvm-tutor', title: 'banach-space/llvm-tutor', note: 'A maintained, current (2024+) collection of out-of-tree NPM pass examples. The best place to copy from.' },
+  ]}
+/>
+
+<LessonComplete />

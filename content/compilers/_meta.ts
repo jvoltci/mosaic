@@ -1,7 +1,6 @@
 export default {
   index: 'Overview',
-  llvm: 'LLVM',
-  mlir: 'MLIR',
-  'tvm-and-xla': 'TVM, XLA & ExecuTorch',
-  'gpu-kernels': 'GPU Kernels (Triton, Vulkan, Metal)',
+  foundation: 'Foundation (LLVM, MLIR)',
+  production: 'Production Compilers',
+  kernels: 'Kernels & Hardware',
 }

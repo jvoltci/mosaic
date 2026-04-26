@@ -1,5 +1,7 @@
 export default {
   index: 'Overview',
-  'on-device': 'On-Device Inference',
   'vllm-sglang': 'vLLM & SGLang',
+  'on-device': 'On-Device Inference',
+  'cost-latency': 'Cost & Latency',
+  observability: 'Observability',
 }

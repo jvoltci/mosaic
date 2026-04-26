@@ -150,33 +150,34 @@ Selective is the production sweet spot.
 
 <RunInBrowser
   description="Estimate activation memory for a Transformer training run."
-  code={`def activation_gb(L, d, n_heads, n_kv_heads, ffn_mult, T, B, dtype_bytes=2, checkpoint='none'):
-    """Rough peak activation memory for a Transformer training pass."""
-    H = n_heads
-    # Per layer, per token:
-    attn_scores  = H * T * dtype_bytes        # the N×N attention matrix
-    attn_io      = 4 * d * dtype_bytes        # q, k, v projections + output (rough)
-    ffn          = ffn_mult * d * dtype_bytes # intermediate FFN
-    per_layer_per_token = attn_scores + attn_io + ffn
-    full_act_bytes = L * per_layer_per_token * T * B
+  code={`def activation_gb(L, d, ffn_mult, T, B, dtype_bytes=2, checkpoint='none'):
+    """Activation memory for a Transformer training step (Megatron-LM formula,
+    Korthikanti 2022, assuming FlashAttention so the T×T score matrix is never
+    materialized in HBM). Captures dominant terms: Q/K/V/O projections + FFN
+    intermediate. Ignores small bookkeeping (norm scratch, dropout masks)."""
+    attn_proj = 4 * d              # Q, K, V, attn-output activations
+    ffn       = 2 * ffn_mult       # FFN input + SwiGLU/GELU intermediate
+    per_layer = (attn_proj + ffn) * T * B * dtype_bytes
+    total     = L * per_layer
     if checkpoint == 'full':
-        # Save only at layer boundaries; recompute the rest. Approx √L reduction.
-        full_act_bytes /= (L ** 0.5)
+        # Save only at layer boundaries; recompute the rest. ~√L reduction.
+        total /= (L ** 0.5)
     elif checkpoint == 'selective':
-        # Keep FFN, recompute attention. Approx 0.4x.
-        full_act_bytes *= 0.4
-    return full_act_bytes / 1024**3
+        # Megatron selective recomputation: keep cheap, recompute expensive. ~0.4×.
+        total *= 0.4
+    return total / 1024**3
 
 configs = [
-    ("Llama-7B  d=4096 H=32  L=32  ffn=11k T=8K  B=1  no-ckpt",  32, 4096, 32, 8, 11008, 8192, 1, 'none'),
-    ("Llama-7B  same  selective ckpt                          ",  32, 4096, 32, 8, 11008, 8192, 1, 'selective'),
-    ("Llama-7B  same  full ckpt                               ",  32, 4096, 32, 8, 11008, 8192, 1, 'full'),
-    ("Llama-70B d=8192 H=64  L=80  ffn=28k T=8K  B=1  no-ckpt",   80, 8192, 64, 8, 28672, 8192, 1, 'none'),
+    ("Llama-7B  d=4096 L=32  ffn=11k T=8K  B=1  no-ckpt",     dict(L=32, d=4096, ffn_mult=11008, T=8192, B=1, checkpoint='none')),
+    ("Llama-7B  same  selective ckpt                  ",      dict(L=32, d=4096, ffn_mult=11008, T=8192, B=1, checkpoint='selective')),
+    ("Llama-7B  same  full ckpt                       ",      dict(L=32, d=4096, ffn_mult=11008, T=8192, B=1, checkpoint='full')),
+    ("Llama-70B d=8192 L=80  ffn=28k T=8K  B=1  no-ckpt",     dict(L=80, d=8192, ffn_mult=28672, T=8192, B=1, checkpoint='none')),
+    ("Llama-70B same  selective ckpt                  ",      dict(L=80, d=8192, ffn_mult=28672, T=8192, B=1, checkpoint='selective')),
 ]
-print(f"{'config':<60}  {'activations':>14}")
-print('-' * 80)
-for label, *a in configs:
-    print(f"{label:<60}  {activation_gb(*a):>11.2f} GB")
+print(f"{'config':<55}  {'activations':>14}")
+print('-' * 75)
+for label, kw in configs:
+    print(f"{label:<55}  {activation_gb(**kw):>11.2f} GB")
 `}
 />
 

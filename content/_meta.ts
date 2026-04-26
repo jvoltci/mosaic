@@ -19,6 +19,7 @@ export default {
   compilers: 'ML Compilers & Hardware',
   applied: 'Applied AI · Build & Ship',
   '-- links': { type: 'separator', title: 'Reference' },
+  'learning-paths': 'Learning Paths',
   cheatsheet: {
     title: 'Cheatsheet',
     theme: { layout: 'full', sidebar: false, toc: false, breadcrumb: false, pagination: false },

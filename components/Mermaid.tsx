@@ -5,6 +5,11 @@ import { useEffect, useId, useRef, useState } from 'react'
 /**
  * Mosaic-themed Mermaid renderer. Theme-aware: re-renders when the user toggles
  * dark/light. Replaces Nextra's default Mermaid (aliased in next.config.mjs).
+ *
+ * Improvements:
+ * - Loading skeleton while diagram renders
+ * - Click-to-zoom on mobile/small diagrams
+ * - Error fallback instead of blank space
  */
 
 const DARK_THEME = {
@@ -85,6 +90,8 @@ function isDark(): boolean {
 export function Mermaid({ chart }: { chart: string }) {
   const id = useId()
   const [svg, setSvg] = useState<string>('')
+  const [status, setStatus] = useState<'loading' | 'done' | 'error'>('loading')
+  const [zoomed, setZoomed] = useState(false)
   const [tick, setTick] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -103,6 +110,7 @@ export function Mermaid({ chart }: { chart: string }) {
 
   useEffect(() => {
     let cancelled = false
+    setStatus('loading')
     async function render() {
       const { default: mermaid } = await import('mermaid')
       mermaid.initialize({
@@ -117,10 +125,14 @@ export function Mermaid({ chart }: { chart: string }) {
           id.replaceAll(':', '') + '-' + tick,
           chart.replaceAll('\\n', '\n'),
         )
-        if (!cancelled) setSvg(svg)
+        if (!cancelled) {
+          setSvg(svg)
+          setStatus('done')
+        }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error('Mermaid render error:', e)
+        if (!cancelled) setStatus('error')
       }
     }
     render()
@@ -129,12 +141,56 @@ export function Mermaid({ chart }: { chart: string }) {
     }
   }, [chart, id, tick])
 
+  if (status === 'error') {
+    return (
+      <div className="m-mermaid m-mermaid-error">
+        <span>⚠️ Diagram failed to render</span>
+      </div>
+    )
+  }
+
   return (
-    <div
-      ref={ref}
-      className="m-mermaid"
-      dangerouslySetInnerHTML={{ __html: svg }}
-      aria-label="Diagram"
-    />
+    <>
+      <div
+        ref={ref}
+        className={`m-mermaid ${status === 'loading' ? 'm-mermaid-loading' : ''}`}
+        onClick={() => setZoomed(true)}
+        role="img"
+        aria-label="Diagram"
+        title="Click to enlarge"
+      >
+        {status === 'loading' && (
+          <div className="m-mermaid-skeleton" aria-hidden>
+            <div className="m-mermaid-skeleton-pulse" />
+          </div>
+        )}
+        {svg && (
+          <div dangerouslySetInnerHTML={{ __html: svg }} />
+        )}
+      </div>
+
+      {/* Zoom overlay */}
+      {zoomed && svg && (
+        <div
+          className="m-mermaid-overlay"
+          onClick={() => setZoomed(false)}
+          role="dialog"
+          aria-label="Enlarged diagram"
+        >
+          <div
+            className="m-mermaid-overlay-content"
+            onClick={(e) => e.stopPropagation()}
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+          <button
+            className="m-mermaid-overlay-close"
+            onClick={() => setZoomed(false)}
+            aria-label="Close enlarged diagram"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+    </>
   )
 }

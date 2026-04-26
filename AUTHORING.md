@@ -33,7 +33,6 @@ Every lesson follows the same template so readers always know where to look:
 | **Mental model** | One Mermaid diagram or analogy. The image that makes the concept click. |
 | **Concrete walkthrough** | Real code, real numbers, side-by-side comparisons. No handwaving. |
 | **Run it in your browser** | A `<RunInBrowser>` block — Python via Pyodide. Works on phones. ~6 MB load on first run, cached after. |
-| **Run it on real hardware** | A `<ColabLink>` to a notebook for things Pyodide can't do (GPU, big models, network). |
 | **Quick check** | A `<Quiz>` with 2–3 options. Tests the *understanding*, not the trivia. |
 | **Key takeaways** | Numbered, scannable. The 3–5 things you'd write on a napkin. |
 | **Go deeper** | A `<Resources>` block linking papers, blogs, Karpathy videos, source repos. This is where readers who *really* want to dig in go next. |
@@ -58,16 +57,15 @@ All registered globally in [`mdx-components.tsx`](./mdx-components.tsx) — no i
 | `<Cheatsheet>...</Cheatsheet>` | Inline TL;DR-style callout (orthogonal to the auto-aggregated `## TL;DR`). |
 | `<LessonComplete />` | "Mark complete" button (saves to localStorage). |
 | `<ModuleProgress lessons={[{slug, title, estMin}, ...]} />` | Lesson list + progress bar for module index pages. |
-| `<ColabLink href="..." label="..." description="..." />` | Big call-to-action card linking to a Colab notebook. |
 | `<Resources items={[{kind, href, title, author, note}, ...]} />` | Linked list of papers / videos / blogs / repos. `kind` ∈ paper, video, blog, repo, docs, book. |
-| `<RunInBrowser code={\`...\`} description="..." />` | Pyodide-powered Python runner. Works on phone browsers. ~6 MB load on first click; cached. |
+| `<RunInBrowser code={\`...\`} description="..." group="..." variants={[...]} />` | Pyodide-powered Python runner. Works on phone browsers. ~6 MB load on first click; cached. `group` shares state across cells; `variants` adds quick-tweak chips for mobile. |
+| `<FillIn prompt="..." answer="..." prefix="..." suffix="..." accept={[...]} hint="..." explanation="..." />` | Code-completion / short-answer prompt. Active recall. Use 1–2 per lesson. |
+| `<CostCalc workload="train-7b" hardware={["b200","mi355x","tpu-v6","h100"]} gpus={1024} />` | Live training cost / latency / energy comparator across hardware. Numbers from `lib/hardware-canon.ts`. |
 | ` ```mermaid ` | Mermaid diagrams (built into Nextra). |
 
-### Picking the right "run" component
+### Running code in lessons
 
-- **`<RunInBrowser>`** — pure Python, no GPU, no external APIs (Pyodide can't network). Perfect for math, data structures, visualizations, sanity checks. Always works on mobile.
-- **`<ColabLink>`** — anything else. GPU, large models, API calls, training. Open in Colab → free T4 GPU → run.
-- **Both, in the same lesson** — give the in-browser version for the concept, the Colab for the real thing.
+`<RunInBrowser>` is the only runtime component. Pure Python via Pyodide — no GPU, no networking. Perfect for math, data structures, visualizations, sanity checks. Works on phone browsers. For GPU/large-model demos, **show the runnable code as a normal fenced code block** with a one-line "run this on a GPU box" comment. We deliberately don't link to Colab — broken external repos and one-click-then-wait-30-seconds is friction we don't want.
 
 ---
 

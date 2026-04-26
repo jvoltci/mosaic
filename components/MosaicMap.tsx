@@ -4,10 +4,8 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { TILES, TRACK_ACCENT, TRACK_ICON, TRACK_LABELS, type Tile, type TrackKey } from '../lib/mosaic-tiles'
 import { axialToPixel, hexPath, bounds } from '../lib/hex'
+import { useProgress } from '../lib/use-progress'
 import { illustrationFor } from './tiles'
-
-const STORAGE_KEY = 'mosaic:completed'
-const PROGRESS_EVENT = 'mosaic:progress'
 
 type Variant = 'landing' | 'map' | 'cheatsheet'
 type Props = {
@@ -18,29 +16,10 @@ type Props = {
 type TooltipState = { tile: Tile; x: number; y: number; pinned: boolean }
 
 export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
-  const [completed, setCompleted] = useState<Set<string>>(new Set())
+  const { completed } = useProgress()
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
-
-  // Sync localStorage progress
-  useEffect(() => {
-    const sync = () => {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        setCompleted(new Set(raw ? JSON.parse(raw) : []))
-      } catch {
-        setCompleted(new Set())
-      }
-    }
-    sync()
-    window.addEventListener(PROGRESS_EVENT, sync)
-    window.addEventListener('storage', sync)
-    return () => {
-      window.removeEventListener(PROGRESS_EVENT, sync)
-      window.removeEventListener('storage', sync)
-    }
-  }, [])
 
   // Dismiss tooltip on outside click / Escape
   useEffect(() => {
@@ -89,6 +68,7 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
   }, [completed])
 
   const totalDone = TILES.reduce((n, t) => n + (completed.has(t.slug) ? 1 : 0), 0)
+  const availableCount = TILES.reduce((n, t) => n + (t.available ? 1 : 0), 0)
 
   function showTooltipForTile(tile: Tile, anchor: SVGElement, pinned = false) {
     if (!stageRef.current) return
@@ -116,14 +96,14 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
           <p className="m-section-eyebrow">The course map</p>
           <h2 className="m-section-title">
             {totalDone === 0
-              ? 'Build the mosaic, one lesson at a time.'
-              : totalDone === TILES.length
-                ? '🏁 You completed the mosaic.'
-                : `${totalDone} of ${TILES.length} tiles complete.`}
+              ? `${availableCount} of ${TILES.length} lessons written. Pick any tile.`
+              : totalDone === availableCount
+                ? `🏁 ${totalDone} of ${availableCount} written lessons completed.`
+                : `${totalDone} of ${availableCount} written lessons completed.`}
           </h2>
           <p className="m-section-lede">
-            Every tile is one lesson. Hover or tap to see what it teaches; tap again to open it. As you finish
-            lessons, tiles fill in with their illustration — your progress becomes the artwork.
+            Every tile is one lesson. Solid tiles are written; dashed tiles are stubs being filled in. Hover or
+            tap to see what each teaches.
           </p>
         </header>
       )}

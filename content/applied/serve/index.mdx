@@ -9,19 +9,67 @@ A model file isn't a product. This module covers the full last mile: which infer
 
 <ModuleProgress
   lessons={[
-    { slug: '/applied/serve/on-device', title: 'On-Device Inference', estMin: 15 },
     { slug: '/applied/serve/vllm-sglang', title: 'vLLM & SGLang', estMin: 14 },
+    { slug: '/applied/serve/on-device', title: 'On-Device Inference', estMin: 15 },
+    { slug: '/applied/serve/cost-latency', title: 'Cost & Latency', estMin: 16 },
+    { slug: '/applied/serve/observability', title: 'Observability', estMin: 14 },
   ]}
 />
-
-> More lessons coming: Cost & Latency · Observability
 
 <Capstone
   title="A real chat app — running fully on your phone, offline"
   pitch="A native iOS or Android app with a 4-bit LLM inside, generating tokens at airplane-mode-speed. No cloud."
-  what="Build a SwiftUI (iOS) or Kotlin Compose (Android) chat UI. Embed llama.cpp's C++ runtime. Ship a Q4_K_M Llama-3.2-3B GGUF inside the app bundle. Wire prompt → tokens with proper streaming. Test on real device with airplane mode on. Measure tokens/sec under sustained load + thermal throttling."
-  sota={['llama.cpp (Metal/Vulkan/NEON)', 'GGUF Q4_K_M', 'SwiftUI / Kotlin Compose', 'Llama-3.2-3B-Instruct', 'streaming token decode']}
+  what="A SwiftUI (iOS) or Kotlin Compose (Android) chat app embedding llama.cpp with a Q4_K_M Llama-3.2-3B GGUF in the app bundle. The artifact is the app + a benchmark report (tok/s under sustained load + thermal-throttling curve)."
+  sota={['llama.cpp (Metal / Vulkan / NEON)', 'GGUF Q4_K_M', 'SwiftUI / Kotlin Compose', 'Llama-3.2-3B-Instruct', 'streaming token decode']}
   device="phone"
-  time="One weekend"
+  time="One focused weekend (~12 h)"
   level="advanced"
+  steps={[
+    {
+      title: 'Build llama.cpp for your device',
+      goal: 'Clone llama.cpp. iOS: build the Metal-enabled XCFramework via `make IOS=1` or the provided CMake. Android: NDK build with Vulkan. Verify with the included `main` binary on a desktop first to confirm your build chain works.',
+      checkpoint: '`./main -m model.gguf -p "hello"` produces output on the device or simulator.',
+      trap: 'Metal/Vulkan support is opt-in; without it you fall back to CPU and lose 5–10× perf. Check the build flags carefully.',
+      est: '90 min',
+    },
+    {
+      title: 'Quantize and bundle a 3B model',
+      goal: 'Download Llama-3.2-3B-Instruct, run llama.cpp\'s `convert_hf_to_gguf.py` then `quantize -m model.gguf model-q4.gguf Q4_K_M`. The result is ~2 GB. Bundle it inside your app (or download on first launch).',
+      checkpoint: 'You have `model-q4.gguf` of ~2 GB. Loading it on a Mac in `main` produces sensible chat output.',
+      trap: 'iOS app-store apps have a 4 GB IPA limit but no per-asset cap. Android APK has a 200 MB cap — use Asset Pack delivery if you bundle in-app, or download-on-first-launch.',
+      est: '60 min',
+    },
+    {
+      title: 'Wire llama.cpp into the native UI',
+      goal: 'iOS: write a small Swift wrapper calling the C API (`llama_load_model_from_file`, `llama_eval`, `llama_sample_token`). Android: same via JNI. Expose `streamTokens(prompt) -> AsyncSequence<Token>`.',
+      checkpoint: 'A unit test in your app project: feed a prompt, get a generator that yields tokens one at a time.',
+      trap: 'On iOS, the Metal backend must be initialized on the main thread or it fails silently. Check `ggml_metal_init()` return.',
+      est: '120 min',
+    },
+    {
+      title: 'Ship a chat UI',
+      goal: 'iOS: SwiftUI ChatView with a TextField + List of messages. Android: Compose equivalent. Wire the streamTokens generator to update the UI per token. Add the system message, user/assistant alternation.',
+      checkpoint: 'Type "hello", see tokens stream into the UI in real time, no cloud.',
+      est: '120 min',
+    },
+    {
+      title: 'Benchmark under sustained load',
+      goal: 'Generate 500 tokens 10 times back to back. Plot tokens/sec per run on a chart in-app. The phone will warm up; tokens/s typically drops 30–60% after the first 30 seconds. Note the steady-state.',
+      checkpoint: 'You have a chart showing the thermal-throttle curve. Steady-state on a recent iPhone Pro: ~10–20 tok/s for a 3B Q4_K_M.',
+      trap: 'Benchmarks vary wildly between simulator (slow) and device (fast); always benchmark on hardware.',
+      est: '60 min',
+    },
+    {
+      title: 'Polish + ship',
+      goal: 'Add airplane-mode test (works), error handling (no model file, OOM), settings (temperature, max tokens). Record a 30-second video of the app in airplane mode for the README.',
+      checkpoint: 'Side-loaded build runs end-to-end on your phone. Repo has an APK or .ipa download link, the source, the benchmark plot, and the demo video.',
+      est: '90 min',
+    },
+  ]}
+  outcomes={[
+    'A working LLM chat app on your phone — fully offline, fully local',
+    'Fluency with llama.cpp\'s C API, GGUF quantization, native mobile build pipelines',
+    'A benchmark methodology for thermal-throttling on mobile silicon',
+    'A demo video that\'s genuinely fun to show people',
+  ]}
 />

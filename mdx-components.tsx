@@ -4,11 +4,12 @@ import { Figure } from './components/Figure'
 import { Cheatsheet } from './components/Cheatsheet'
 import { LessonComplete } from './components/LessonComplete'
 import { ModuleProgress } from './components/ModuleProgress'
-import { ColabLink } from './components/ColabLink'
 import { Resources } from './components/Resources'
 import { RunInBrowser } from './components/RunInBrowser'
 import { Mermaid } from './components/Mermaid'
 import { Capstone } from './components/Capstone'
+import { FillIn } from './components/FillIn'
+import { CostCalc } from './components/CostCalc'
 
 const docsComponents = getDocsMDXComponents()
 
@@ -21,9 +22,10 @@ export const useMDXComponents = (components?: Record<string, React.ComponentType
   Cheatsheet,
   LessonComplete,
   ModuleProgress,
-  ColabLink,
   Resources,
   RunInBrowser,
   Capstone,
+  FillIn,
+  CostCalc,
   ...components,
 })

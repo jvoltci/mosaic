@@ -28,6 +28,20 @@
     "tldr": "- **RAG = retrieval + generation.** Pull the most relevant chunks for a question, stuff them in the prompt, let the model answer.\n- **The pipeline:** chunk documents → embed → store → retrieve top-k → re-rank → stuff into prompt → generate.\n- **Hybrid retrieval (dense + BM25 fused via RRF) beats either alone.** Dense gets meaning; BM25 gets exact keywords.\n- **A cross-encoder re-ranker is the highest-leverage stage.** It sees the query and chunks together and re-scores. Adds 100 ms, can lift Recall@5 by 15+ points.\n- **Chunking is underrated.** Recursive character splitting at ~400 tokens with 50-token overlap is the sane default. Semantic chunking is sometimes worth it; rarely worth it from day one."
   },
   {
+    "slug": "/applied/serve/cost-latency",
+    "track": "applied",
+    "module": "applied/serve",
+    "title": "Cost & Latency",
+    "tldr": "- Production LLM serving has **five economic levers**, in roughly increasing implementation cost: prefix caching → continuous batching → model routing → quantization → hardware. Each is multiplicative; doing all five well gets you 10–30× cheaper than naive serving.\n- **Prefix caching is the cheapest win and most teams leave it on the table.** Hit-rate-aware prompt design takes a day and pays off forever.\n- **Continuous batching is on by default** in vLLM v1, SGLang, TensorRT-LLM. Old TGI / HF transformers servers leave 5× on the floor — switch.\n- **Model routing** (small model first, escalate on uncertainty) is the highest-leverage lever for tasks where ~70% of queries are easy. Saves 3–8× on the dollar; no quality loss.\n- **FP8 / INT4 quantization** halves to quarters memory and bandwidth costs. Modern open weights take quantization with negligible quality regression.\n- **Hardware is last because it's a capex decision.** Use the calculator below to compare B200 vs MI355X vs H100 for *your* workload."
+  },
+  {
+    "slug": "/applied/serve/observability",
+    "track": "applied",
+    "module": "applied/serve",
+    "title": "Observability",
+    "tldr": "- LLM systems need **three layers of observation** that map cleanly to web-app analogues: **traces** (every input, every tool call, every token, every output), **online evals** (a judge that scores live traffic and produces a quality time-series), and **regression detection** (alerts when a deploy moved a metric).\n- **Langfuse, Phoenix, and LangSmith** are the 2026 production reference stacks. Langfuse and Phoenix are OSS; LangSmith is paid but tightest with LangChain. They all model the same OpenTelemetry-style trace tree: trace → span → tool/llm call → tokens.\n- **Online evals are not unit tests.** Unit tests run on a fixed dataset; online evals score *real user traffic*, surface drift, and feed regressions into your CI loop.\n- **Five metrics to track from day one:** latency (TTFT + TPOT), cost ($/request), trace volume, fail rate (parse errors, refusals), and a single quality score from your judge model. Everything else is derivative.\n- **Cost-down without observability = quality-down silently.** Every lever from the previous lesson is a regression risk; you cannot ship them safely without the harness on."
+  },
+  {
     "slug": "/applied/serve/on-device",
     "track": "applied",
     "module": "applied/serve",
@@ -42,9 +56,37 @@
     "tldr": "- **vLLM** = the default inference server. PagedAttention, continuous batching, broad model support, well-documented. Easy to deploy.\n- **SGLang** = the throughput-focused alternative. **RadixAttention** for shared-prefix workloads, structured-output via constrained decoding (XGrammar), often **1.5–3× faster** on agent / chat workloads where prompts share long preambles.\n- **TGI (HuggingFace)** = the convenient choice if you're already in the HF ecosystem; ships less aggressive perf, more polish.\n- **TensorRT-LLM** = peak NVIDIA performance; pay in build complexity and Hopper-only optimizations.\n- **Pick by workload:** broad inference → vLLM. Many shared-prefix / agentic requests → SGLang. NVIDIA-native max throughput → TensorRT-LLM. Internal tooling within HF → TGI."
   },
   {
-    "slug": "/compilers/tvm-and-xla/torch-compile",
+    "slug": "/compilers/foundation/llvm-ir",
     "track": "compilers",
-    "module": "compilers/tvm-and-xla",
+    "module": "compilers/foundation",
+    "title": "LLVM IR Tour",
+    "tldr": "- LLVM IR is a **strongly-typed, SSA, RISC-like virtual instruction set**. The \"language\" between your source compiler and the actual machine. Once you can read it, you can read what every modern compiler is actually doing.\n- It has **three forms**: the `.ll` text format (human-readable), the `.bc` bitcode binary, and the in-memory C++ `Module` API. They are all the same IR — round-trip lossless.\n- Three building blocks: **Module → Function → BasicBlock → Instruction**. SSA means each value is defined exactly once. PHI nodes pick up control-flow merges.\n- The **type system** is small but rigid: `i1, i8, i32, i64, float, double, half, bfloat`, plus pointers, vectors, structs, arrays. **No bare ints** — every integer carries its width.\n- Almost every AI compiler eventually lowers to LLVM IR. MLIR's `llvm` dialect is *literally* this IR. Triton emits LLVM IR. JAX/XLA emits LLVM IR through StableHLO. **Knowing LLVM is the universal floor.**"
+  },
+  {
+    "slug": "/compilers/foundation/lowering",
+    "track": "compilers",
+    "module": "compilers/foundation",
+    "title": "Dialects & Lowering",
+    "tldr": "- **Lowering** = a pass that rewrites IR from one dialect to a *lower-level* dialect. The semantics stay the same; the representation changes.\n- Most lowerings are written as **rewrite patterns**: \"match this op pattern in dialect A; replace with this set of ops in dialect B.\" MLIR's `RewritePatternSet` + dialect-conversion driver compose them.\n- The full pipeline of an AI compiler is a **stack of lowerings**: `linalg → scf → vector → gpu → nvgpu → llvm`. Each step keeps just enough structure for the next pass to optimize against.\n- **Type conversion** is half the work: `tensor` becomes `memref` becomes `llvm.ptr`. Every op needs a corresponding rewrite for its operand types.\n- **Bufferization** is the most important specific lowering in AI compilers — turning value-typed tensors into memory-typed `memref`s, which is when allocation decisions get made."
+  },
+  {
+    "slug": "/compilers/foundation/mlir-overview",
+    "track": "compilers",
+    "module": "compilers/foundation",
+    "title": "MLIR Overview",
+    "tldr": "- **MLIR** = Multi-Level IR. One framework for representing programs at *many* levels of abstraction simultaneously: linear-algebra ops at the top, GPU ops in the middle, LLVM IR at the bottom. Every level is just a different **dialect**.\n- Every modern AI compiler — **Triton, IREE, JAX/XLA, ExecuTorch, OpenXLA, ONNX-MLIR, Modular's MAX** — is built on MLIR. PyTorch's `torch.compile` lowers through it (via Inductor → Triton → MLIR → LLVM).\n- The **dialect** is the unit of vocabulary. `linalg`, `tensor`, `arith`, `scf` (structured control flow), `memref`, `gpu`, `nvgpu`, `vector`, `llvm` are the canonical built-in dialects. Custom domains (TPU, NPU, your hardware) ship their own.\n- **Lowering** is the central operation: rewrite IR from a higher-level dialect to a lower one, repeatedly, until you're at `llvm` and can hand off to LLVM. Every AI compiler is essentially a stack of lowerings.\n- MLIR is younger than LLVM (Google, 2019) but moves much faster. **The API churns** — code from 2022 often doesn't compile against current main. Pin your version."
+  },
+  {
+    "slug": "/compilers/foundation/passes",
+    "track": "compilers",
+    "module": "compilers/foundation",
+    "title": "Passes & Pipelines",
+    "tldr": "- An LLVM **pass** is a function that reads or rewrites IR. Two flavors: **analysis** passes (compute information about the IR, like dominator trees or alias info) and **transformation** passes (rewrite IR, like inlining or dead-code elimination).\n- Passes compose into a **pipeline**. `-O0` is empty; `-O2` is ~150 passes; `-O3` adds aggressive vectorization. Each pass assumes the previous ones ran.\n- LLVM 14+ uses the **New Pass Manager** (NPM). Old `legacy::PassManager` is deprecated; new code uses `PassBuilder` + `ModulePassManager`. The migration matters because tutorials older than 2022 are usually wrong.\n- **Analysis passes are cached and invalidated**: if a transformation changes the IR, dependent analyses get re-run lazily. This is what makes pipelines fast.\n- The single most useful flag for understanding a pipeline: `opt --print-after-all` — dumps IR after every pass. Scary the first time; indispensable forever after."
+  },
+  {
+    "slug": "/compilers/production/torch-compile",
+    "track": "compilers",
+    "module": "compilers/production",
     "title": "torch.compile (Inductor)",
     "tldr": "- `torch.compile(model)` swaps PyTorch's eager execution for **graph capture (Dynamo) + autograd compilation (AOTAutograd) + kernel codegen (Inductor)**.\n- **Dynamo** captures Python-level graphs by hooking into bytecode evaluation, falling back gracefully when it can't trace.\n- **AOTAutograd** lifts the Python autograd into a static forward+backward joint graph that the compiler can optimize together.\n- **Inductor** lowers the graph to **Triton kernels** for GPU and **C++ + OpenMP** for CPU. Fuses pointwise ops aggressively.\n- **Real-world wins:** **1.3–2× speedup on training**, **1.5–4× on inference**, mostly from kernel fusion and CUDA Graph capture. The default in PyTorch 2.5+."
   },
@@ -70,6 +112,13 @@
     "tldr": "- **MHA** has one K/V head per Q head — every token's KV cache scales with $H$ heads. Memory bottleneck.\n- **MQA** (Shazeer, 2019): one K/V head shared across all Q heads. Cache shrinks $H\\times$. Quality drops noticeably at scale.\n- **GQA** (Ainslie et al., 2023): groups of Q heads share K/V. **Default** in Llama-3, Mistral, Qwen-2.5 — cache shrinks 4–8×, quality matches MHA.\n- **MLA** (DeepSeek-V2/V3, 2024): K/V projected into a low-rank **latent** space, decompressed only when needed. Cache shrinks **another ~10×** vs GQA, with quality matching or exceeding MHA.\n- **The tradeoff** is always cache size vs quality. As of April 2026, GQA is the floor and MLA is the frontier — Llama 4 (2025) adopted MLA-style compression in its largest variant."
   },
   {
+    "slug": "/llm-architecture/attention/mha",
+    "track": "llm-architecture",
+    "module": "llm-architecture/attention",
+    "title": "Multi-Head Attention",
+    "tldr": "- An attention head is a triplet `(Q, K, V)` of projections from `d_model → d_head`. **MHA runs `H` of them in parallel and concatenates the outputs.**\n- The whole thing is one big matmul, one reshape, one scaled-dot-product, one concat, one matmul. There is no separate code path per head — heads are an *axis*, not a module.\n- The scale factor `1/√d_k` exists so the softmax doesn't saturate as `d_head` grows; without it, training a wide head diverges.\n- Per-token cost is `O(N · d_model²)` for the projections and `O(N² · d_model)` for attention. **The N² term is what you spend the rest of this track learning to tame** (GQA, KV cache, FlashAttention, paged, chunked prefill, MLA)."
+  },
+  {
     "slug": "/llm-architecture/attention/rope-yarn",
     "track": "llm-architecture",
     "module": "llm-architecture/attention",
@@ -77,11 +126,39 @@
     "tldr": "- **RoPE** (Rotary Positional Embedding, Su et al., 2021) encodes position by *rotating* query and key vectors in 2D pairs by an angle proportional to position. The dot product $\\langle q_m, k_n \\rangle$ then depends only on the *relative* position $m - n$.\n- It's the de facto standard in 2024–2026: Llama family, Mistral, Qwen, DeepSeek, Gemma all use it.\n- **The base wavelength $\\theta$ controls how far the model can extrapolate.** Standard $\\theta = 10{,}000$ caps at ~4–8K tokens. Beyond that, attention scores collapse.\n- **NTK-aware / YaRN / LongRoPE** are the three rescaling techniques that extend a model's context to 32K → 128K → 1M tokens with light continued pretraining.\n- For inference, **PI (Position Interpolation)**, **NTK-by-parts**, and **YaRN** are the three you'll see in real configs. **LongRoPE** (2024) is the current frontier for 2M+ token contexts."
   },
   {
+    "slug": "/llm-architecture/inference-time/chunked-prefill",
+    "track": "llm-architecture",
+    "module": "llm-architecture/inference-time",
+    "title": "Chunked Prefill",
+    "tldr": "- Pre-2024 servers ran prefill and decode as **separate, alternating phases**. A 16K-token prefill stalled every decoder behind it for hundreds of milliseconds.\n- **Chunked prefill** slices each prefill into fixed-size chunks (e.g., 2048 tokens) and **packs them into the same forward pass as ongoing decodes**. The GPU runs one big batched matmul; everyone makes progress.\n- **vLLM v1 was rebuilt around this primitive.** It is the *default* scheduling mode — there is no longer a \"prefill phase\" or a \"decode phase,\" only \"the next batch.\"\n- Net effect: **TPOT becomes stable** (no more decode stutter when a long prompt arrives), **TTFT degrades gracefully** (long prompts pay slightly more by being chunked), throughput holds within ~5% of pure-prefill.\n- Disaggregation ([disaggregated serving](../kv-cache/disaggregated)) is the *split-into-two-pools* answer; chunked prefill is the *one-pool-done-right* answer. They're complements, not competitors — small fleets use chunked; big fleets disaggregate and chunk inside each pool."
+  },
+  {
+    "slug": "/llm-architecture/inference-time/sampling",
+    "track": "llm-architecture",
+    "module": "llm-architecture/inference-time",
+    "title": "Sampling",
+    "tldr": "- The model outputs **logits** — one number per vocab token. Sampling is everything that turns those logits into a single chosen token.\n- **Temperature** rescales logits before softmax. T < 1 sharpens; T > 1 flattens; T = 0 is greedy argmax.\n- **Top-k** keeps only the k highest-probability tokens, renormalizes, samples. Crude but cheap.\n- **Top-p (nucleus)** keeps the smallest set whose cumulative probability ≥ p, renormalizes, samples. The default for Llama / Mistral / GPT for years.\n- **Min-p** keeps tokens whose probability is ≥ `p_min × max_prob`. **Adapts to the distribution's confidence** — wider when the model is uncertain, narrower when it's sharp. The 2024–2026 frontier; default in DeepSeek-R1, Qwen-3, and llama.cpp.\n- **Order of operations matters.** Logit penalties → temperature → top-k → top-p / min-p → sample. Doing it in the wrong order changes the result."
+  },
+  {
     "slug": "/llm-architecture/inference-time/spec-decoding",
     "track": "llm-architecture",
     "module": "llm-architecture/inference-time",
     "title": "Speculative Decoding",
     "tldr": "- A **small draft model** generates $K$ candidate tokens. The **big target model** verifies all $K$ in a single forward pass. Accepted tokens become output; rejected ones trigger a fallback sample.\n- The math: a single $K$-token target forward is much cheaper than $K$ sequential forwards. As long as the draft is **right most of the time**, you get **2–3× decode speedup** with **zero distribution change**.\n- **EAGLE-3** (2024–2025) is the current frontier — auto-regressive draft heads attached to the target, ~80% acceptance rate, ~3× speedup on common workloads.\n- **Medusa** uses parallel multi-token prediction heads on the target itself. Simpler than draft-model methods; ~2× speedup.\n- **Lookahead / PLD** (Prompt Lookup Decoding) needs no draft model — speculates from n-grams in the prompt. Free at inference time; works best on summarization / repetitive output."
+  },
+  {
+    "slug": "/llm-architecture/inference-time/structured-output",
+    "track": "llm-architecture",
+    "module": "llm-architecture/inference-time",
+    "title": "Structured Output",
+    "tldr": "- \"Respond in JSON\" prompts still produce malformed output **5–15% of the time** on current frontier models. That's a production failure, not a glitch.\n- **Constrained decoding** compiles your schema/grammar into a **finite-state machine**, then at every decode step **masks logits for tokens that would violate the grammar**. Output is *guaranteed* parseable.\n- **XGrammar** (2024) is the current speed champion: a context-free grammar engine with a token-mask cache that makes the overhead **under 5% of decode time**. Default in vLLM v1, SGLang, TensorRT-LLM.\n- **Outlines** (2023) pioneered the FSM-mask approach. Slower than XGrammar in some cases; still widely used for its Python-level ergonomics.\n- **llama.cpp's GBNF** is the same idea for the local-LLM world. Same speed regime, same correctness guarantee.\n- **Don't use it on reasoning traces.** Constrained decoding hurts free-form thought; apply it only at the final-answer extraction step."
+  },
+  {
+    "slug": "/llm-architecture/kv-cache/disaggregated",
+    "track": "llm-architecture",
+    "module": "llm-architecture/kv-cache",
+    "title": "Disaggregated Serving",
+    "tldr": "- Prefill is **compute-bound** (long parallel matmul on the prompt). Decode is **memory-bandwidth-bound** (one token at a time, re-reading the whole KV cache). Running them on the same GPU forces a compromise both jobs hate.\n- **Disaggregated serving** = two GPU pools. The **prefill pool** runs prompts to completion, then **transfers KV** to a **decode pool** that streams tokens to the user. Each pool is sized and tuned for its job.\n- Pioneered as a research idea in **DistServe** (OSDI 2024) and shipped at scale in **Mooncake** (Moonshot AI, 2024) and **vLLM-disagg** / **SGLang-disagg** (2024–2025). By 2026 it's standard in any frontier-model serving stack.\n- The **KV transfer** between pools is the crux. NVLink intra-node, RDMA / NIXL inter-node. Round-trip cost is usually 5–30 ms — hidden behind the first decode step.\n- Net win: **3–4× more decode throughput at the same SLO**, or 2× tighter TTFT at the same throughput. Big wins for long contexts and SLOs that bound TTFT and TPOT (time-per-output-token) separately."
   },
   {
     "slug": "/llm-architecture/kv-cache/kv-basics",
@@ -98,11 +175,39 @@
     "tldr": "- The naive KV cache reserves a contiguous slab equal to the *max* context for each sequence. Most sequences are shorter — **60–80% of GPU memory is wasted on internal fragmentation**.\n- **PagedAttention** (Kwon et al., SOSP 2023, the vLLM paper) treats the cache like an OS treats virtual memory: small fixed-size **blocks** + per-sequence **block tables** + a **block allocator**.\n- Result: **2–4× higher throughput** than HuggingFace TGI on the same hardware. vLLM's defaults match the paper's design.\n- **vLLM v1** (late 2024) refactored the engine around chunked prefill + PagedAttention as the unified primitive. **SGLang's RadixAttention** is the alternative paradigm — same paged storage, plus prefix-tree sharing.\n- This is the single most impactful kernel-level change in LLM serving since FlashAttention. Required reading."
   },
   {
+    "slug": "/llm-architecture/kv-cache/prefix-radix",
+    "track": "llm-architecture",
+    "module": "llm-architecture/kv-cache",
+    "title": "Prefix & RadixAttention",
+    "tldr": "- Most production traffic isn't unique. Two requests share a system prompt; ten requests share a chat history; a hundred requests share a few-shot template. **Prefill those shared tokens once, reuse the KV across requests.**\n- vLLM v0.5+ ships **automatic prefix caching** (APC): every block whose contents have been seen before is served from a hash table instead of recomputed.\n- SGLang's **RadixAttention** generalises APC to a **radix tree** — every prefix of every conversation is a node, every block is a tree edge, eviction is LRU on the tree. Sharing extends down the entire tree, not just the root prompt.\n- Real workloads see **3–10× throughput on TTFT** (time-to-first-token) when prefix hit rate is high. Chatbots, agents, evals, and few-shot inference are all prefix-heavy by nature.\n- **Cache reuse is correct only when the prefix tokens are byte-identical** (after tokenization). Tokenizer drift, hidden whitespace, RNG-seeded prompts → cache miss."
+  },
+  {
     "slug": "/ml-execution/gpu-fundamentals/gemm",
     "track": "ml-execution",
     "module": "ml-execution/gpu-fundamentals",
     "title": "GEMM (Hopper / Blackwell)",
     "tldr": "- **GEMM** = General Matrix Multiplication. **`C = α·A·B + β·C`**. ~80% of LLM training and inference flops live here.\n- A naive matmul reads each input element $O(N)$ times — fully memory-bound. Production kernels do **cache blocking** at multiple levels (registers, shared memory, L2) so each byte from HBM gets reused $\\sim 64–256\\times$.\n- On Hopper / Blackwell, the kernel structure is **TMA + WGMMA + warp specialization** — async copies overlap with tensor-core matmul, and producer/consumer warps split the work.\n- **CUTLASS 4** (NVIDIA) and **Triton 3.x** are the two ways most teams write it in 2026. Hand-tuned CUTLASS still wins by 5–10% on edge shapes; Triton wins on developer time.\n- For LLM inference at small batch (decode), GEMM becomes **GEMV** — different optimization regime, memory-bound, where INT4/FP8 weight quant rules."
+  },
+  {
+    "slug": "/ml-execution/gpu-fundamentals/shared-memory",
+    "track": "ml-execution",
+    "module": "ml-execution/gpu-fundamentals",
+    "title": "Shared Memory",
+    "tldr": "- **Shared memory** (SMEM) is per-SM, programmer-managed, on-chip scratch. ~228 KB on H100, 256 KB on B200. Latency: ~30 cycles. Bandwidth: ~10× HBM.\n- Every fast kernel uses SMEM as a **staging area**: load a tile from HBM into SMEM, all the threads in the block access it many times, then write the result back. Without SMEM tiling, kernels are HBM-bandwidth-bound and run at under 10% of peak.\n- SMEM is split into **32 banks** (one per warp lane). If two threads in a warp hit the same bank with different addresses → **bank conflict** → serialization. **A single 32-way conflict cuts throughput by 32×.**\n- The standard fix is **swizzling**: a permutation of the SMEM index that hashes consecutive threads to different banks. CUTLASS/CUTE do this for you; understanding the principle is what lets you debug a slow kernel.\n- On Hopper+, the **TMA (Tensor Memory Accelerator)** is a hardware async-copy engine that loads tiles into SMEM in the background while the rest of the warp computes. This is the foundation of every modern AI kernel."
+  },
+  {
+    "slug": "/ml-execution/gpu-fundamentals/sm-architecture",
+    "track": "ml-execution",
+    "module": "ml-execution/gpu-fundamentals",
+    "title": "SM Architecture",
+    "tldr": "- A modern GPU is a fleet of **Streaming Multiprocessors** (SMs). Each SM is its own little processor: 4 warp schedulers, 64–128 CUDA cores, 4 tensor cores, a register file, and shared memory. Everything that runs on a GPU runs on one SM at a time.\n- The **warp** is the real unit of execution: 32 threads marching in lockstep through one instruction at a time. Threads in a warp can't truly diverge — they take turns when they branch. **A kernel that thinks \"thread\" is the unit is going to be slow.**\n- **Tensor Cores** do the heavy lifting in modern AI: 4×8×16 (or larger) FP16/BF16/FP8 matrix-multiply-accumulate per cycle per core. Hopper has 4 per SM; Blackwell has more and faster ones with FP4/FP6 support.\n- **Occupancy** is the fraction of an SM's potential warps that are actually resident. High occupancy hides memory latency; low occupancy with high arithmetic intensity is fine. Don't chase occupancy as an end in itself.\n- The same kernel on H100 (132 SMs) vs B200 (148 SMs) vs MI355X (288 CUs) sees different parallelism budgets. Tile size and CTA count are tuned per-chip."
+  },
+  {
+    "slug": "/ml-execution/gpu-fundamentals/thread-hierarchy",
+    "track": "ml-execution",
+    "module": "ml-execution/gpu-fundamentals",
+    "title": "Thread Hierarchy",
+    "tldr": "- A CUDA kernel launches a **grid** of **thread blocks** (CTAs). Each block runs on a single SM. Each block is a set of **threads**, organized internally into **warps** of 32.\n- Hierarchy: **grid → block → warp → thread**. Each level has its own coordinates (`blockIdx`, `threadIdx`, etc.) and its own synchronization primitives.\n- **The block-per-tile pattern** is universal in modern AI kernels: each block computes one output tile (e.g., 128×128 of a matmul). The grid is `(M/128, N/128)`. Index math turns block coordinates into tile coordinates.\n- **Synchronization is hierarchical**: `__syncthreads()` syncs a block, `__syncwarp()` syncs a warp, the CUDA driver syncs the grid. Cooperative groups generalize this on H100+ with **distributed shared memory** (DSMEM) — adjacent blocks share an SMEM cluster.\n- **Triton hides this hierarchy.** A Triton kernel sees one *program* per tile; the warp/thread layer is implicit and the compiler decides. Same mental model, less typing."
   },
   {
     "slug": "/training/distributed/fsdp",
@@ -126,6 +231,13 @@
     "tldr": "- **FP8 training** runs forward and backward passes in 8-bit floats (E4M3 or E5M2), with a **higher-precision master copy** of weights and a **scaling strategy** to keep values in dynamic range.\n- On H100/B200, FP8 GEMM is **~2× the throughput** of BF16 on tensor cores. End-to-end training is typically **1.4–1.8× faster** wall-clock than BF16, with no quality regression at scale.\n- **DeepSeek-V3** (Dec 2024) is the most-cited public recipe: per-tile/per-block scaling, FP8 forward + backward, FP32 master + FP32 reduce-scatter, \"increased-accuracy accumulation\" via partial sums in FP32.\n- **Blackwell B200/B300 (2025)** added **NVFP4** (4-bit float) and **MXFP8** (block-scaled 8-bit) in tensor cores, opening the door to 4-bit training experiments through 2025–2026.\n- Below-frontier scale, **BF16 + FP8 inference** is more common than FP8 training. The training recipe is heavyweight; test on a 1–7B model before committing."
   },
   {
+    "slug": "/training/optimization/lr-schedules",
+    "track": "training",
+    "module": "training/optimization",
+    "title": "LR Schedules & WSD",
+    "tldr": "- **Cosine decay** was the default for GPT-3 through Llama 2: the LR follows a half-cosine from peak to ~0 over a fixed number of steps. Works well but **requires knowing total training steps upfront**.\n- **Warmup-Stable-Decay (WSD)** splits training into three phases: a short linear warmup (0.5–5% of steps), a long stable plateau at peak LR (80–90%), and a final cooldown (5–15%). MiniCPM, DeepSeek-V3, and Qwen 2.5 all use variants of WSD.\n- WSD's killer advantage: **you don't need to decide total compute budget before training starts.** You can train indefinitely at the plateau, then cool down whenever you want a strong checkpoint.\n- The cooldown phase does most of the final loss improvement — it suppresses gradient noise and lets the model settle into a sharper minimum. Skipping it costs 0.5–2% quality."
+  },
+  {
     "slug": "/training/optimization/optimizers",
     "track": "training",
     "module": "training/optimization",
@@ -145,5 +257,12 @@
     "module": "training/post-training",
     "title": "LoRA, QLoRA & DoRA",
     "tldr": "- **LoRA** trains two small low-rank matrices `A` and `B` instead of the full weight `W`. Update is `W + (B·A) × scale`. Storage and gradient memory drop ~100×.\n- **QLoRA** keeps the base model's weights frozen and quantized to **NF4** (4-bit), only LoRA adapters are FP16. This is what lets you fine-tune **Llama-3-70B on a single 80 GB GPU**.\n- **DoRA** decomposes weight updates into magnitude + direction. Closes most of the gap between LoRA and full fine-tuning at small additional cost.\n- Production serving uses **multi-LoRA** (S-LoRA, vLLM `--enable-lora`) — one base model, many tenant-specific adapters hot-swapped per request.\n- **Rule of thumb:** rank `r=16, alpha=32` is the sane default. Bump `r` to 64 only if you can't fit the task otherwise."
+  },
+  {
+    "slug": "/training/post-training/sft",
+    "track": "training",
+    "module": "training/post-training",
+    "title": "SFT & Instruction Tuning",
+    "tldr": "- **Supervised Fine-Tuning (SFT)** is the first post-training step: you train on (instruction, response) pairs so the model learns to follow directions instead of just completing text.\n- **Chat templates** (ChatML, Llama 3 format) wrap conversations with special tokens that delineate system/user/assistant turns. **Using the wrong template at inference = broken model.** Always match training and serving templates.\n- **Prompt loss masking** zeros the loss on instruction tokens (set labels to `-100`). The model only learns to *generate* responses, not to memorize your prompts.\n- **Sample packing** concatenates multiple short conversations into one sequence, eliminating padding waste. With proper attention masking, this gives 2–4× training throughput on typical chat datasets.\n- Quality > quantity. 10K carefully curated examples often beats 1M noisy ones. The LIMA paper (2023) showed 1K high-quality examples suffice for strong instruction-following."
   }
 ]

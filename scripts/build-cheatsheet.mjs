@@ -1,6 +1,7 @@
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import yaml from 'js-yaml'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const CONTENT = join(ROOT, 'content')
@@ -26,12 +27,12 @@ async function* walk(dir) {
 function extractFrontmatter(text) {
   const m = text.match(/^---\n([\s\S]*?)\n---/)
   if (!m) return {}
-  const out = {}
-  for (const line of m[1].split('\n')) {
-    const kv = line.match(/^([^:]+):\s*(.*)$/)
-    if (kv) out[kv[1].trim()] = kv[2].trim().replace(/^["']|["']$/g, '')
+  try {
+    const parsed = yaml.load(m[1])
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
   }
-  return out
 }
 
 function extractTLDR(text) {

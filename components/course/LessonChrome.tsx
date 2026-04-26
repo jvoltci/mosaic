@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { TILES, TRACK_ACCENT, TRACK_ICON, TRACK_LABELS, type Tile } from '../../lib/mosaic-tiles'
+import { FocusScroll } from './FocusScroll'
 
 type Props = {
   pathname: string
@@ -37,7 +38,9 @@ export function LessonChrome({ pathname, children }: Props) {
         </span>
       </nav>
 
-      <div className="m-lesson-body m-prose">{children}</div>
+      <div className="m-lesson-body m-prose">
+        <FocusScroll>{children}</FocusScroll>
+      </div>
 
       <footer className="m-lesson-footer">
         <div className="m-lesson-footer-row">

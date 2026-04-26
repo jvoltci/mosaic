@@ -1,19 +1,19 @@
 const PILLARS = [
   {
     label: 'Free, forever',
-    body: "Built openly, no signup, no paywall, no email gate. Edit any lesson on GitHub and send a PR.",
+    body: 'Built openly on GitHub. No signup, no paywall, no email gate. Edit any lesson and send a PR.',
   },
   {
     label: 'Modular by design',
-    body: 'Tracks → modules → ~10–15 min lessons. Finish each piece in one sitting. Progress saves locally.',
+    body: 'Tracks → modules → 10–15 minute lessons. Finish each piece in one sitting. Progress saves locally.',
   },
   {
     label: 'Built for revision',
-    body: 'Every lesson has a TL;DR pinned at the top. The Cheatsheet aggregates them all for fast re-skimming.',
+    body: 'Every lesson has a TL;DR pinned at the top. The cheatsheet aggregates them all for fast re-skimming.',
   },
   {
-    label: 'From silicon to model',
-    body: 'Memory model → GPU programming → Transformers → MLIR → Applied. The stack, in order, with no gaps.',
+    label: 'Current to the field',
+    body: 'Blackwell, DeepSeek-V3, vLLM v1, MLA, FP8. Re-validated quarterly. Each lesson stamps its last review date.',
   },
 ]
 

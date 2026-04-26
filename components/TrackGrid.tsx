@@ -33,6 +33,16 @@ const TRACKS: Track[] = [
   },
   {
     num: '03',
+    href: '/training',
+    icon: '📈',
+    name: 'Training & Fine-tuning',
+    desc:
+      'Gradient accumulation, mixed-precision training, LoRA, FSDP, DeepSpeed — making training fast and memory-efficient.',
+    modules: 3,
+    accent: 'var(--m-track-training)',
+  },
+  {
+    num: '04',
     href: '/llm-architecture',
     icon: '🧠',
     name: 'LLM Architecture',
@@ -42,7 +52,7 @@ const TRACKS: Track[] = [
     accent: 'var(--m-track-architecture)',
   },
   {
-    num: '04',
+    num: '05',
     href: '/compilers',
     icon: '⚙️',
     name: 'ML Compilers & Hardware',
@@ -51,13 +61,23 @@ const TRACKS: Track[] = [
     modules: 4,
     accent: 'var(--m-track-compilers)',
   },
+  {
+    num: '06',
+    href: '/applied',
+    icon: '🚀',
+    name: 'Applied ML Systems',
+    desc:
+      'End-to-end deployment: model serving, edge inference, on-device ML, and building production AI systems.',
+    modules: 3,
+    accent: 'var(--m-track-applied)',
+  },
 ]
 
 export function TrackGrid() {
   return (
     <section className="m-tracks-section">
       <div className="m-tracks-inner">
-        <p className="m-section-eyebrow">The four tracks</p>
+        <p className="m-section-eyebrow">The six tracks</p>
         <h2 className="m-section-title">Build the stack from the silicon up.</h2>
         <p className="m-section-lede">
           Each track is a self-contained sequence of small modules. Lessons take ~10–15 minutes — short enough that

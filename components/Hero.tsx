@@ -7,26 +7,27 @@ export function Hero() {
       <TileCluster className="m-tile-cluster tl" seed={3} />
       <TileCluster className="m-tile-cluster br" seed={9} />
 
-      <p className="m-hero-eyebrow">A free course · Built in public · Forever</p>
+      <p className="m-hero-eyebrow">Free · Open · Current</p>
 
       <h1 className="m-hero-title">Mosaic</h1>
 
       <p className="m-hero-tagline">
-        Learn the systems behind modern&nbsp;AI&nbsp;— and&nbsp;build cutting-edge things you can run on your phone.
+        The systems behind modern AI — from the C++ memory model up to MLA, FlashAttention-3,
+        and on-device inference.
       </p>
 
       <p className="m-hero-sub">
-        Six tracks. Sixty-plus lessons. From the C++ memory model up to MLIR, FlashAttention-3, GRPO,
-        and on-device inference. Every lesson is finishable in 15&nbsp;minutes — and most have
-        a runnable demo right in your browser, on whatever device you&apos;re holding.
+        Six tracks. Sixty-plus lessons. Every concept the field actually uses today, written
+        like an engineer would explain it to another engineer. Real numbers, runnable code,
+        nothing hand-wavy. Each lesson finishes in 15 minutes.
       </p>
 
       <div className="m-hero-cta-row">
-        <Link href="/foundations/cpp-memory/stack-vs-heap" className="m-btn-primary">
-          Start Lesson 1 <span aria-hidden>→</span>
+        <Link href="/learning-paths" className="m-btn-primary">
+          Reading orders <span aria-hidden>→</span>
         </Link>
         <Link href="#course-map" className="m-btn-secondary">
-          See the course map
+          Or the full map
         </Link>
       </div>
 

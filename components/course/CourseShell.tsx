@@ -5,8 +5,11 @@ import { SelectionLookup } from '../SelectionLookup'
 export function CourseShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="m-shell">
+      <a href="#main-content" className="m-skip-link">
+        Skip to content
+      </a>
       <CourseNav />
-      <main className="m-shell-main">{children}</main>
+      <main id="main-content" className="m-shell-main">{children}</main>
       <SupportSection />
       <SelectionLookup />
     </div>

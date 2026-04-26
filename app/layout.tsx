@@ -40,6 +40,19 @@ export const metadata = {
   title: { default: 'Mosaic — A free course on AI Systems & ML Compilers', template: '%s · Mosaic' },
   description:
     'A free, self-paced, beautiful course on AI Systems, ML Compilers, and AI Architectures. Build cutting-edge AI things you can run on your phone.',
+  openGraph: {
+    type: 'website',
+    siteName: 'Mosaic',
+    title: 'Mosaic — A free course on AI Systems & ML Compilers',
+    description: 'A free, self-paced course on AI Systems, ML Compilers, and AI Architectures.',
+    locale: 'en_US',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Mosaic — A free course on AI Systems & ML Compilers',
+    description: 'A free, self-paced course on AI Systems, ML Compilers, and AI Architectures.',
+  },
+  metadataBase: new URL('https://mosaic.shivy.dev'),
 }
 
 export const viewport = {
@@ -50,16 +63,16 @@ export const viewport = {
 
 // Inline script — runs before React hydration, sets html class from
 // localStorage or system preference. Prevents flash on first paint.
+// Dark mode is the hard default (class="dark" on <html>).
+// This script is kept minimal — dark is already applied via SSR.
 const THEME_INIT_SCRIPT = `
 try {
   var t = localStorage.getItem('mosaic:theme');
-  var sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  var dark = t ? (t === 'dark') : sysDark;
-  document.documentElement.classList.toggle('dark', dark);
-  document.documentElement.classList.toggle('light', !dark);
-} catch (e) {
-  document.documentElement.classList.add('dark');
-}
+  if (t === 'light') {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+  }
+} catch (e) {}
 `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -67,7 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       dir="ltr"
-      className={`${fraunces.variable} ${sourceSerif.variable} ${inter.variable} ${jetbrains.variable}`}
+      className={`dark ${fraunces.variable} ${sourceSerif.variable} ${inter.variable} ${jetbrains.variable}`}
       suppressHydrationWarning
     >
       <head>

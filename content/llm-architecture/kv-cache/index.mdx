@@ -11,17 +11,65 @@ You can't recompute the entire prefix on every generated token; the KV cache is 
   lessons={[
     { slug: '/llm-architecture/kv-cache/kv-basics', title: 'KV Cache Basics', estMin: 14 },
     { slug: '/llm-architecture/kv-cache/paged-attention', title: 'PagedAttention (vLLM)', estMin: 16 },
+    { slug: '/llm-architecture/kv-cache/prefix-radix', title: 'Prefix & RadixAttention', estMin: 14 },
+    { slug: '/llm-architecture/kv-cache/disaggregated', title: 'Disaggregated Serving', estMin: 18 },
   ]}
 />
-
-> More lessons coming: Prefix & RadixAttention · Disaggregated Serving (DistServe / Mooncake)
 
 <Capstone
   title="PagedAttention from scratch — in 300 lines"
   pitch="Build the OS-style KV-cache manager that powers vLLM. Watch fragmentation disappear in front of you."
-  what="Implement a paged KV cache in pure Python: block tables, block allocator, free-list, copy-on-write for branching sequences. Compare memory waste vs naive contiguous cache as you simulate 100 sequences with varied lengths. Plot fragmentation over time."
+  what="A pure-Python paged KV cache with a block table, block allocator, free-list, and copy-on-write for branching sequences. The artifact is the simulator + a fragmentation plot vs naive contiguous cache + a one-page README."
   sota={['PyTorch', 'vLLM source (reference)', 'PagedAttention paper (Kwon et al., SOSP 2023)', 'matplotlib for the fragmentation plot']}
   device="colab"
-  time="One weekend"
+  time="One focused weekend (~8 h)"
   level="advanced"
+  steps={[
+    {
+      title: 'Define a Sequence object and a naive contiguous cache',
+      goal: 'Each Sequence has: id, prompt_len, output_len, current_pos. The naive cache is a single big tensor `[max_concurrent_seqs, max_seq_len, n_layers, n_heads, d_head]`. Allocate per sequence at peak length.',
+      checkpoint: 'You can run 100 sequences with varied output lengths and the naive cache reports its memory waste (allocated minus actually-used).',
+      trap: 'Allocating per-sequence at the *prompt-only* length forgets that decode also needs space; you\'ll OOM at runtime, not at allocation.',
+      est: '45 min',
+    },
+    {
+      title: 'Build the block allocator — fixed-size KV blocks of 16 tokens',
+      goal: 'Allocate one big pool of blocks. Each block holds 16 tokens worth of KV across all layers/heads. Maintain a free-list (a `deque`). Track which sequence owns which blocks via a per-sequence block_table list.',
+      checkpoint: 'Allocate 1000 blocks, hand them out to 100 sequences as needed, free as sequences finish, never run out.',
+      trap: 'Don\'t pre-allocate worst-case per sequence — the whole point of paging is on-demand. Allocate a new block only when the sequence crosses a 16-token boundary.',
+      est: '90 min',
+    },
+    {
+      title: 'Logical-to-physical address translation',
+      goal: 'Given a sequence and a token position t, return the physical block id from the block_table and the offset within the block (`t // 16, t % 16`). This is the "page table walk" that the paged attention kernel does on the GPU.',
+      checkpoint: 'You can append 1000 tokens to a sequence and read any of them back without bugs.',
+      est: '60 min',
+    },
+    {
+      title: 'Copy-on-write for branching sequences',
+      goal: 'Implement `fork(seq) -> new_seq` that shares the prefix block_table with the parent. When either sequence writes to a shared block, copy it. Useful for beam search and parallel sampling.',
+      checkpoint: 'Fork a sequence at position 100, both branches generate 50 more tokens, the original blocks 0–6 stay shared, blocks 7+ diverge.',
+      trap: 'Reference-count blocks, not sequences. A block can be shared by N>2 sequences; your refcount logic must increment per fork and decrement per release.',
+      est: '60 min',
+    },
+    {
+      title: 'Simulate 1000 sequences and plot fragmentation',
+      goal: 'Generate a workload: arrival times Poisson, prompts uniform [200, 4000], outputs uniform [50, 500]. Run for N steps. At each step compute (used_blocks / total_blocks) and (logical_tokens / max_logical) for naive and paged. Plot.',
+      checkpoint: 'Plot shows naive cache hits its waste ceiling (~50%) early; paged stays near 100% utilization.',
+      trap: 'For the naive comparison to be fair, both versions must serve the same workload. Use a fixed random seed.',
+      est: '90 min',
+    },
+    {
+      title: 'README + push',
+      goal: 'README explains the block-table data structure with one diagram, embeds the fragmentation plot, links the PagedAttention paper. Single-file impl + benchmark.',
+      checkpoint: 'A reader runs `python simulate.py` and gets the plot.',
+      est: '45 min',
+    },
+  ]}
+  outcomes={[
+    'A working paged KV-cache manager in pure Python — the same data structure vLLM ships',
+    'Fluency with block tables, free-lists, copy-on-write — OS-style memory management',
+    'A fragmentation benchmark you can re-run when comparing serving stacks',
+    'A clean repo that maps directly to the PagedAttention paper figures',
+  ]}
 />

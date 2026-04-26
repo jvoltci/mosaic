@@ -11,6 +11,7 @@ import {
   TILES,
   type TrackKey,
 } from '../../lib/mosaic-tiles'
+import { useProgress } from '../../lib/use-progress'
 import { ThemeToggle } from '../ThemeToggle'
 
 const TRACK_ORDER: TrackKey[] = [
@@ -22,38 +23,18 @@ const TRACK_ORDER: TrackKey[] = [
   'applied',
 ]
 
-const STORAGE_KEY = 'mosaic:completed'
-const PROGRESS_EVENT = 'mosaic:progress'
-
 export function CourseNav() {
   const pathname = usePathname() || '/'
   const [scrolled, setScrolled] = useState(false)
-  const [completed, setCompleted] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
+  const { completed: completedSet } = useProgress()
+  const completed = completedSet.size
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
-  useEffect(() => {
-    const sync = () => {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        setCompleted(raw ? JSON.parse(raw).length : 0)
-      } catch {
-        setCompleted(0)
-      }
-    }
-    sync()
-    window.addEventListener(PROGRESS_EVENT, sync)
-    window.addEventListener('storage', sync)
-    return () => {
-      window.removeEventListener(PROGRESS_EVENT, sync)
-      window.removeEventListener('storage', sync)
-    }
   }, [])
 
   useEffect(() => setMenuOpen(false), [pathname])

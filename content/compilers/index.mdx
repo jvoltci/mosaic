@@ -1,6 +1,6 @@
 ---
 title: ML Compilers & Hardware
-description: LLVM, MLIR, TVM, XLA, ExecuTorch, Triton, Vulkan, Metal Performance Shaders — how high-level model code becomes optimized hardware-specific binaries.
+description: LLVM, MLIR, Triton, CUTLASS, ThunderKittens, Pallas, Inductor — how high-level model code becomes optimized hardware-specific binaries.
 ---
 
 import { TrackBanner } from '../../components/TrackBanner'
@@ -8,20 +8,20 @@ import { TrackBanner } from '../../components/TrackBanner'
 <TrackBanner
   track="compilers"
   icon="05"
-  eyebrow="Track 04 · ML Compilers & Hardware"
+  eyebrow="Track 05 · ML Compilers & Hardware"
   title="From a high-level graph to optimized hardware."
-  subtitle="Nobody hand-writes a CUDA kernel for every new model and every new GPU. They write compilers that generate the kernels — and compiler skill is what turns one engineer into a force multiplier for an entire hardware vendor or model team."
+  subtitle="Nobody hand-writes a CUDA kernel for every new model on every new GPU. Compilers generate the kernels — and compiler skill is what turns one engineer into a force multiplier for an entire hardware vendor or model team."
 />
 
 ## Modules in this track
 
-- **[LLVM](/compilers/llvm)** — IR, passes, code generation, the universal compiler infrastructure
-- **[MLIR](/compilers/mlir)** — multi-level IR, dialects, lowering, the linalg story
-- **[TVM, XLA & ExecuTorch](/compilers/tvm-and-xla)** — graph capture, fusion, autotuning, deployable artifacts
-- **[GPU Kernels (Triton, Vulkan, Metal)](/compilers/gpu-kernels)** — when to drop to hand-written kernels and how
+- **[Foundation](/compilers/foundation)** — LLVM IR, passes, MLIR, dialects, lowering. The substrate.
+- **[Production](/compilers/production)** — torch.compile, JAX/Pallas, IREE/ExecuTorch, operator fusion. The compilers people actually run.
+- **[Kernels & Hardware](/compilers/kernels)** — Triton, CUTLASS, ThunderKittens, the 2026 hardware landscape. Where you drop down when the compiler isn't enough.
 
 ## What you'll be able to do after
 
 - Read MLIR dumps and understand what each dialect is doing
-- Write a small TVM schedule for a custom op
-- Recognize when a workload calls for `torch.compile` vs hand-written Triton
+- Write a Triton kernel and a small MLIR pass
+- Recognize when a workload calls for `torch.compile` vs hand-written kernels
+- Tell which hardware (Blackwell · MI355X · TPU v6 · Cerebras · Groq) is right for which workload

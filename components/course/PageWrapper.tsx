@@ -1,5 +1,6 @@
 import { TILES } from '../../lib/mosaic-tiles'
 import { LessonChrome } from './LessonChrome'
+import { ErrorBoundary } from '../ErrorBoundary'
 
 const FULL_BLEED = new Set(['/', '/map', '/cheatsheet'])
 
@@ -16,13 +17,22 @@ type Props = {
  */
 export function PageWrapper({ pathname, children }: Props) {
   if (FULL_BLEED.has(pathname)) {
-    return <>{children}</>
+    return <ErrorBoundary>{children}</ErrorBoundary>
   }
 
   const isLesson = TILES.some((t) => t.slug === pathname)
   if (isLesson) {
-    return <LessonChrome pathname={pathname}>{children}</LessonChrome>
+    return (
+      <ErrorBoundary>
+        <LessonChrome pathname={pathname}>{children}</LessonChrome>
+      </ErrorBoundary>
+    )
   }
 
-  return <article className="m-index-page m-prose">{children}</article>
+  return (
+    <ErrorBoundary>
+      <article className="m-index-page m-prose">{children}</article>
+    </ErrorBoundary>
+  )
 }
+
