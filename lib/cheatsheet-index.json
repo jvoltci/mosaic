@@ -357,11 +357,32 @@
     "tldr": "- The single biggest perf insight in modern GPU kernels: **don't make threads wait for memory**. Use a hardware engine to copy bytes from HBM to SMEM in the background while the warp keeps computing.\n- **`cp.async`** (Ampere, 2020) was the first such instruction: a thread issues an async copy from HBM to SMEM, then later does a `cp.async.wait_group` when it actually needs the data. While waiting, the warp can do other work.\n- **TMA — Tensor Memory Accelerator** (Hopper, 2022) generalizes this: one *thread* issues a copy of an entire 2D/3D *tile* (described by a precomputed TMA descriptor), and a hardware engine performs the entire copy. No 32-thread cooperation needed.\n- **TMA + warp specialization + multi-stage pipeline** is the recipe behind FlashAttention-3, every CUTLASS 4 GEMM, all of cuBLAS on Hopper, and most modern Triton kernels: producer warps issue TMA loads, consumer warps do the math, perfect overlap.\n- Blackwell extends the design with a **CTA-cluster TMA**: one TMA descriptor can populate SMEM across multiple CTAs in a cluster simultaneously, enabling new kernel topologies."
   },
   {
+    "slug": "/training/distributed/data-parallel",
+    "track": "training",
+    "module": "training/distributed",
+    "title": "Data Parallel & DDP",
+    "tldr": "- **Data parallel (DP)** = each GPU holds a *full copy* of the model weights, processes a different *slice of the batch*, then averages gradients across GPUs at backward time.\n- **PyTorch DDP** is the canonical implementation. Wraps your model in one line; the framework adds AllReduce calls during backward.\n- The communication primitive is **Ring-AllReduce** — gradients flow around the GPU ring in two passes (reduce-scatter, all-gather). Cost: `2 × (N-1) × params / N` bytes per GPU per step.\n- **Gradient bucketing** groups small parameter tensors into fixed-size buckets so the AllReduce traffic happens in a few large transfers instead of many tiny ones. ~10× higher achieved bandwidth.\n- **Comm-compute overlap** — start AllReduce on layer N's gradients while still computing backward on layer N-1. This is what gets DDP from \"parallel but not scaling\" to \"70%+ efficient up to ~32 GPUs\"."
+  },
+  {
     "slug": "/training/distributed/fsdp",
     "track": "training",
     "module": "training/distributed",
     "title": "ZeRO & FSDP2",
     "tldr": "- **DDP** replicates the full model on every rank. Out of memory at large scale.\n- **ZeRO** (Rajbhandari et al., 2020) progressively shards what's replicated: stages 1 (optimizer state), 2 (+ gradients), 3 (+ parameters). Stage 3 = the whole model lives across ranks; only the active layer is materialized.\n- **FSDP** is PyTorch's ZeRO-3 (2022). **FSDP2** (2024) replaces module-level sharding with **per-parameter sharding via DTensor**, composes cleanly with TP/PP, much faster wraps, simpler code.\n- For a 70B BF16 model on 8 GPUs: DDP doesn't fit at all. FSDP2 fits with room for a 32K-token batch.\n- Default in production through 2026: **FSDP2 (HSDP)** — hybrid sharding within a node + replication across nodes — composed with tensor parallel and pipeline parallel for very large runs."
+  },
+  {
+    "slug": "/training/distributed/pipeline-parallel",
+    "track": "training",
+    "module": "training/distributed",
+    "title": "Pipeline & Zero-Bubble",
+    "tldr": "- **Pipeline parallel (PP)** splits the model across GPUs *by layer*. GPU 0 holds layers 0–N, GPU 1 holds N–2N, etc. Activations flow forward through the pipeline; gradients flow backward.\n- The naive version (GPipe, Huang et al., 2019) has a **bubble**: when GPU N starts forward, GPU 0 is already done and idle. The first stages spend much of the step waiting.\n- **1F1B** (one-forward-one-backward) interleaves forward and backward to fill the bubble. Default in Megatron-LM and DeepSpeed since 2020.\n- **Interleaved 1F1B / virtual stages**: split each GPU's layers into multiple \"virtual stages\" so the bubble shrinks further. Megatron-Core's default for >8 stages.\n- **Zero-bubble (Qi et al., 2024)** is the 2024 breakthrough — a careful schedule that fully eliminates pipeline bubbles by separating gradient computation from weight updates. Now ships in TorchTitan and Megatron-Core."
+  },
+  {
+    "slug": "/training/distributed/tensor-parallel",
+    "track": "training",
+    "module": "training/distributed",
+    "title": "Tensor Parallel",
+    "tldr": "- **Tensor parallel (TP)** splits each individual matmul (and embedding, attention) across multiple GPUs. Each GPU holds a *slice* of every weight matrix; activations get AllReduced after the slice.\n- **Megatron-LM** introduced the canonical TP design (Shoeybi et al., 2019): column-parallel for the first matmul of an MLP, row-parallel for the second, **two AllReduces per transformer layer** (one in attention, one in MLP).\n- TP shards weights *and* compute → memory and FLOPs scale roughly linearly with TP degree. The cost is communication: **AllReduce on the activations** every layer, twice.\n- **TP works best within a single NVLink domain** (one DGX node, ~8 GPUs). Across nodes, comm bandwidth tanks and TP scaling collapses. Production: TP=8 within node, DP / PP across nodes.\n- The 2026 default for training a 70B+ model: TP=8 + FSDP (DP / sharded) + PP=4. This is what TorchTitan, Megatron-Core, NeMo all assume."
   },
   {
     "slug": "/training/optimization/backprop",
@@ -390,6 +411,13 @@
     "module": "training/optimization",
     "title": "AdamW → Lion → Muon",
     "tldr": "- **SGD-momentum** uses one running average of gradients. Cheap (1× param state) but slow on ill-conditioned losses.\n- **Adam / AdamW** add a per-parameter scaling via second-moment estimates. Costs **2× param state** in optimizer memory but converges robustly. **The default** for ~all LLM pretraining 2018–2024.\n- **Lion** (Chen et al., 2023): one running average, sign-of-update only. Cuts optimizer state to **1×** params, often matches AdamW. Used in PaLM follow-ups, occasionally in Llama-class runs.\n- **Muon** (Jordan et al., 2024): orthogonalize updates via Newton-Schulz iteration. **Frontier** for hidden-layer parameters in 2024–2025; Llama-4 reportedly uses Muon-flavored optimizers in 2025.\n- **Sophia** (Hessian-aware) was a 2023 candidate; mostly displaced by Lion/Muon in 2025 due to compute cost."
+  },
+  {
+    "slug": "/training/post-training/dpo",
+    "track": "training",
+    "module": "training/post-training",
+    "title": "DPO / IPO / KTO",
+    "tldr": "- **DPO (Direct Preference Optimization)** — Rafailov et al., 2023 — replaces PPO-RLHF with a closed-form classification loss on **chosen vs rejected response pairs**. No reward model, no RL, no rollouts. Same gradient direction; vastly simpler training.\n- The DPO loss derives from the same Bradley-Terry preference model RLHF uses, but with the reward function *eliminated analytically* — the policy is its own implicit reward model.\n- **IPO (Identity Preference Optimization)** — Azar et al., 2023 — a regularization fix for DPO that prevents over-optimization when preference data is noisy or near-tied.\n- **KTO (Kahneman-Tversky Optimization)** — ContextualAI, 2024 — uses a single thumbs-up / thumbs-down label per response (no pairs needed). Closer to real production feedback signal.\n- For 2026 production: DPO is the default for paired-preference data; KTO when you only have unary feedback. IPO and other variants come up when DPO drifts."
   },
   {
     "slug": "/training/post-training/grpo-reasoning",
