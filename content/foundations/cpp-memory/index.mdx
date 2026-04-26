@@ -1,0 +1,26 @@
+---
+title: C++ Memory Model
+description: Stack vs heap, RAII, move semantics — the mechanics of how C++ programs use memory.
+---
+
+# C++ Memory Model
+
+Most ML systems work — kernel libraries, runtimes, compilers — is written in C++. To read it, debug it, and write it well, you need a precise mental model of where every variable lives, when it's destroyed, and what costs each operation has.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/foundations/cpp-memory/stack-vs-heap', title: 'Stack vs Heap', estMin: 12 },
+  ]}
+/>
+
+> More lessons coming: Move Semantics & Rvalues · Smart Pointers & RAII · Custom Allocators
+
+<Capstone
+  title="A cache-friendly matmul that beats naive 10×"
+  pitch="The same math, ten times faster — because you laid the bytes out for the CPU instead of against it."
+  what="Implement a 1024×1024 fp32 matrix multiply in C++. Start naive. Add cache blocking. Add AVX-2 SIMD. Add OpenMP. Benchmark each step. By the end, you understand why BLAS is hard."
+  sota={['C++20', 'AVX2 intrinsics', 'OpenMP', 'perf', 'cachegrind', 'OpenBLAS (reference)']}
+  device="laptop"
+  time="One weekend"
+  level="foundational"
+/>

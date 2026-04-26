@@ -1,0 +1,26 @@
+---
+title: Distributed Training
+description: DP, TP, PP, FSDP2 — the parallelism mesh that lets you train across thousands of GPUs.
+---
+
+# Distributed Training
+
+A frontier training run is a 4D or 5D parallelism mesh: data × tensor × pipeline × sequence × expert. This module walks through each axis, shows what they cost in communication and memory, and ends with how production frameworks (TorchTitan, Megatron-Core) compose them.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/training/distributed/fsdp', title: 'ZeRO & FSDP2', estMin: 16 },
+  ]}
+/>
+
+> More lessons coming: Data Parallel & DDP · Tensor Parallel · Pipeline & Zero-Bubble · Sequence / Context Parallel
+
+<Capstone
+  title="Shard a 1.3B model across 4 GPUs with FSDP2 — and watch the network"
+  pitch="Open the profiler, point at the bandwidth bar that's eating your throughput, fix it."
+  what="Train a 1.3B-param GPT across 4 A100s with PyTorch FSDP2. Use torch.profiler to capture an end-to-end trace. Identify the AllGather and ReduceScatter ops on the timeline. Tune `cpu_offload`, `mixed_precision`, and bucket size. Plot scaling efficiency 1 → 4 GPUs. Beat 70% efficiency."
+  sota={['PyTorch FSDP2 (DTensor)', 'torch.profiler', 'NCCL', 'Modal or Lambda Labs (~$5)', 'TorchTitan reference config']}
+  device="cloud"
+  time="One weekend"
+  level="advanced"
+/>

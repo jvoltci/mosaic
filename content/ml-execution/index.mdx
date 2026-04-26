@@ -1,0 +1,26 @@
+---
+title: ML Execution & Quantization
+description: How tensors live in memory, how matmul actually runs, and how to compress models without breaking them.
+---
+
+import { TrackBanner } from '../../components/TrackBanner'
+
+<TrackBanner
+  track="ml-execution"
+  icon="02"
+  eyebrow="Track 02 · ML Execution & Quantization"
+  title="What an ML workload actually does on the metal."
+  subtitle="Before reasoning about ML compilers, you need to understand what an ML workload actually looks like at the hardware level. The primitives every model is made of — tensors, matrix multiplication, GPU programming, and the numerics tricks that make models fit on real machines."
+/>
+
+## Modules in this track
+
+- **[Tensors in Memory](/ml-execution/tensors-in-memory)** — strides, contiguous vs non-contiguous, building a tensor library from scratch
+- **[GPU Fundamentals](/ml-execution/gpu-fundamentals)** — SM architecture, thread hierarchy, shared memory, GEMM
+- **[Quantization](/ml-execution/quantization)** — INT8 / INT4 weight packing, dequantization kernels, KV-cache quantization
+
+## What you'll be able to do after
+
+- Reason about why a "non-contiguous" tensor is sometimes 10× slower
+- Read a CUDA kernel and predict its memory traffic
+- Quantize a model from FP16 to INT4 and understand which tradeoffs you're making

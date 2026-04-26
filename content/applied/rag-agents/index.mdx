@@ -1,0 +1,27 @@
+---
+title: RAG & Agents
+description: Retrieval-augmented generation, ReAct loops, multi-agent orchestration, MCP servers.
+---
+
+# RAG & Agents
+
+Retrieval is how you give a model knowledge that wasn't in training. Agents are how you give it actions. This module is end-to-end practical: every lesson ends with a working agent or RAG pipeline you can run.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/applied/rag-agents/rag-basics', title: 'RAG Fundamentals', estMin: 15 },
+    { slug: '/applied/rag-agents/advanced-rag', title: 'Advanced RAG', estMin: 16 },
+  ]}
+/>
+
+> More lessons coming: Build a ReAct Agent · Model Context Protocol · Multi-agent orchestration
+
+<Capstone
+  title="RAG over your own GitHub repo — deployed by Sunday night"
+  pitch="Index your own code. Ask 'where is X handled?' Get cited answers. Live at a URL your friends can hit."
+  what="Pick a repo (yours or a favorite open-source project). Chunk and embed every file with code-aware splitting. Build hybrid retrieval (BGE + BM25 + RRF) plus cross-encoder reranking. Wire to Claude. Add a Next.js chat UI. Deploy to Vercel + Qdrant Cloud (both free tier). Share the URL."
+  sota={['BAAI/bge-small-en-v1.5 (embedder)', 'BAAI/bge-reranker-v2-m3', 'Qdrant Cloud (free tier)', 'Claude 3.5 Sonnet', 'Next.js + Vercel']}
+  device="laptop"
+  time="One weekend"
+  level="intermediate"
+/>

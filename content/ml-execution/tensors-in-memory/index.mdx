@@ -1,0 +1,20 @@
+---
+title: Tensors in Memory
+description: Strides, layout, and why "the same tensor" can have wildly different performance.
+---
+
+# Tensors in Memory
+
+A tensor isn't just shape and dtype — it's a layout. Two tensors with the same shape can perform very differently depending on how their data is arranged in memory.
+
+> Lessons coming: Strides & Layout · Contiguous vs Non-Contiguous · Build a Tensor Library · TMA & cp.async (Hopper)
+
+<Capstone
+  title="A 200-line tinygrad clone"
+  pitch="A working tensor library — strides, broadcasting, and 5 ops — that runs a real MLP. Less than 200 lines."
+  what="Build a minimal Tensor class with shape + strides + dtype. Implement add, matmul, relu, softmax, transpose. Get the strides right so transpose is O(1). Run an MNIST classifier through it. Compare numerics to PyTorch."
+  sota={['Python (or C++)', 'NumPy reference', 'tinygrad source as reference', 'micrograd as inspiration']}
+  device="laptop"
+  time="One weekend"
+  level="foundational"
+/>

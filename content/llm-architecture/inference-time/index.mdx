@@ -1,0 +1,26 @@
+---
+title: Inference-Time Architecture
+description: Sampling, tokenization, continuous batching, speculative decoding — the moving parts of a real LLM server.
+---
+
+# Inference-Time Architecture
+
+A model file is just weights. Turning that into a serving system that returns tokens at low latency for many concurrent users requires a different kind of architecture — and that architecture is where 80% of real-world LLM engineering happens.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/llm-architecture/inference-time/spec-decoding', title: 'Speculative Decoding', estMin: 15 },
+  ]}
+/>
+
+> More lessons coming: Sampling · Structured Output (XGrammar, Outlines) · Chunked Prefill
+
+<Capstone
+  title="A continuous-batching inference server in 200 lines"
+  pitch="The vLLM scheduler trick — packed forward passes that triple your throughput — built from scratch."
+  what="Wrap Llama-3.2-1B in a FastAPI server. Implement continuous batching: a scheduler that pulls pending sequences from a queue each step, runs one packed forward pass, returns tokens to whichever clients are subscribed. Hit it with 50 concurrent requests. Measure tokens/sec/request before and after batching."
+  sota={['FastAPI', 'transformers', 'asyncio + asyncio.Queue', 'vLLM (reference architecture)', 'Locust for load testing']}
+  device="colab"
+  time="One weekend"
+  level="advanced"
+/>

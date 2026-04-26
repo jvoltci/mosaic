@@ -1,0 +1,27 @@
+---
+title: Talking to LLMs
+description: Prompting, structured output, function calling, embeddings — the primitives every AI app is built from.
+---
+
+# Talking to LLMs
+
+Before you build agents and RAG pipelines, you have to be fluent in the basics: how to phrase prompts so they don't cargo-cult, how to force valid JSON, how to give a model tools it can call, and what an embedding actually is. Each lesson in this module is a runnable Colab.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/applied/llm-basics/prompting', title: 'Prompt Engineering', estMin: 12 },
+    { slug: '/applied/llm-basics/tool-use', title: 'Function Calling', estMin: 14 },
+  ]}
+/>
+
+> More lessons coming: Structured Output · Embeddings
+
+<Capstone
+  title="A 3-tool research agent — in 100 lines, no LangChain"
+  pitch="A real agent that searches the web, reads arXiv abstracts, and writes a cited report — running from a single Python file."
+  what="Build a Claude-powered agent that can call three tools: web_search (Tavily), arxiv_search, and read_url (fetch + extract). Give it a research question. Watch it iterate. Save the trajectory. Solve 5 multi-hop research questions and have it produce a 500-word cited report each."
+  sota={['anthropic SDK', 'Tavily API (free tier)', 'arxiv API', 'parallel tool calls', 'Pydantic for validation']}
+  device="laptop"
+  time="A Saturday"
+  level="intermediate"
+/>

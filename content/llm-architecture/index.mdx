@@ -1,0 +1,26 @@
+---
+title: LLM Architecture
+description: Transformers from a systems lens — attention variants, KV cache, RoPE, sampling, batching.
+---
+
+import { TrackBanner } from '../../components/TrackBanner'
+
+<TrackBanner
+  track="llm-architecture"
+  icon="04"
+  eyebrow="Track 03 · LLM Architecture"
+  title="Transformers from a systems lens."
+  subtitle="A Transformer isn't just a math object — it's a memory allocator, a state machine, and a data pipeline. This track looks at LLMs through the lens of what data lives where and what computation happens at each step, which is what determines whether your model fits, whether it serves, and whether it's fast."
+/>
+
+## Modules in this track
+
+- **[Attention](/llm-architecture/attention)** — MHA, GQA, MQA, RoPE, FlashAttention
+- **[KV Cache](/llm-architecture/kv-cache)** — why we cache, how it grows, PagedAttention
+- **[Inference-Time Architecture](/llm-architecture/inference-time)** — sampling, tokenization, continuous batching, speculative decoding
+
+## What you'll be able to do after
+
+- Read a Transformer implementation and trace where every byte of memory goes
+- Reason about why a "small" model can OOM at long contexts
+- Pick the right attention variant for a given memory / quality tradeoff

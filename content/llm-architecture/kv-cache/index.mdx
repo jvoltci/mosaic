@@ -1,0 +1,27 @@
+---
+title: KV Cache
+description: The state machine that makes autoregressive generation tractable — and the memory manager that makes it scale.
+---
+
+# KV Cache
+
+You can't recompute the entire prefix on every generated token; the KV cache is what lets you avoid that. But the cache also dominates LLM serving memory — which is why PagedAttention, prefix caching, and KV quantization are central topics in modern serving systems.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/llm-architecture/kv-cache/kv-basics', title: 'KV Cache Basics', estMin: 14 },
+    { slug: '/llm-architecture/kv-cache/paged-attention', title: 'PagedAttention (vLLM)', estMin: 16 },
+  ]}
+/>
+
+> More lessons coming: Prefix & RadixAttention · Disaggregated Serving (DistServe / Mooncake)
+
+<Capstone
+  title="PagedAttention from scratch — in 300 lines"
+  pitch="Build the OS-style KV-cache manager that powers vLLM. Watch fragmentation disappear in front of you."
+  what="Implement a paged KV cache in pure Python: block tables, block allocator, free-list, copy-on-write for branching sequences. Compare memory waste vs naive contiguous cache as you simulate 100 sequences with varied lengths. Plot fragmentation over time."
+  sota={['PyTorch', 'vLLM source (reference)', 'PagedAttention paper (Kwon et al., SOSP 2023)', 'matplotlib for the fragmentation plot']}
+  device="colab"
+  time="One weekend"
+  level="advanced"
+/>

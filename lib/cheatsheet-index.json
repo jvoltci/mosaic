@@ -1,0 +1,149 @@
+[
+  {
+    "slug": "/applied/llm-basics/prompting",
+    "track": "applied",
+    "module": "applied/llm-basics",
+    "title": "Prompt Engineering Foundations",
+    "tldr": "- **Zero-shot is the default.** Add complexity only when the model fails — every extra technique is more tokens, more cost, more places to fail.\n- **Few-shot** locks in format and style. It can also lock in *errors* if your examples are wrong; a bad few-shot is worse than zero-shot.\n- **Chain-of-thought** helps on multi-step problems (math, planning) and *hurts* on simple classification. Not a free lunch.\n- **Self-consistency** = sample N CoT reasonings, take the majority answer. Genuinely better on reasoning tasks; N× cost.\n- **Structured output** (JSON mode, Pydantic, Outlines) is how you build real systems. Always prefer schema-validated output over regex."
+  },
+  {
+    "slug": "/applied/llm-basics/tool-use",
+    "track": "applied",
+    "module": "applied/llm-basics",
+    "title": "Function Calling & Tool Use",
+    "tldr": "- **Tool use is structured output where the model picks a tool name and fills typed arguments.** The model never executes — your code does, then feeds the result back.\n- **Modern API schemas (Anthropic, OpenAI) are nearly identical:** define tools with JSON Schema, the model returns `tool_use` blocks with name + arguments.\n- **The loop:** user message → model returns tool calls → your code runs them → feed `tool_result` back → model produces the final answer (or another tool call).\n- **Parallel tool calls** are now the default: a model can request 3 tools in one turn. Run them in parallel; latency drops by N.\n- **Failure modes:** hallucinated tool names (rare on frontier models, common on small ones); coercing string args to numbers (always validate); infinite tool loops (set `max_steps`)."
+  },
+  {
+    "slug": "/applied/rag-agents/advanced-rag",
+    "track": "applied",
+    "module": "applied/rag-agents",
+    "title": "Advanced RAG — HyDE, GraphRAG, Agentic Retrieval",
+    "tldr": "- **Naive RAG fails** on multi-hop questions, vague queries, and entity-centric corpora. Symptom: high retrieval recall on facts, low task accuracy.\n- **HyDE** generates a hypothetical answer with the LLM, embeds it, then retrieves — bridges the query/document phrasing gap.\n- **Query decomposition** breaks one question into 2–4 sub-queries, retrieves for each, then reasons over the union. Best for multi-hop.\n- **GraphRAG** (Microsoft, 2024) builds a knowledge graph from the corpus, then summarizes communities — beats vector search on \"global\" questions a chunk can't answer alone.\n- **Agentic retrieval** lets the model decide its own searches in a loop. Highest ceiling, highest cost, hardest to debug."
+  },
+  {
+    "slug": "/applied/rag-agents/rag-basics",
+    "track": "applied",
+    "module": "applied/rag-agents",
+    "title": "RAG Fundamentals",
+    "tldr": "- **RAG = retrieval + generation.** Pull the most relevant chunks for a question, stuff them in the prompt, let the model answer.\n- **The pipeline:** chunk documents → embed → store → retrieve top-k → re-rank → stuff into prompt → generate.\n- **Hybrid retrieval (dense + BM25 fused via RRF) beats either alone.** Dense gets meaning; BM25 gets exact keywords.\n- **A cross-encoder re-ranker is the highest-leverage stage.** It sees the query and chunks together and re-scores. Adds 100 ms, can lift Recall@5 by 15+ points.\n- **Chunking is underrated.** Recursive character splitting at ~400 tokens with 50-token overlap is the sane default. Semantic chunking is sometimes worth it; rarely worth it from day one."
+  },
+  {
+    "slug": "/applied/serve/on-device",
+    "track": "applied",
+    "module": "applied/serve",
+    "title": "On-Device Inference",
+    "tldr": "- **llama.cpp** is the universal runtime: CPU, Apple Metal, CUDA, Vulkan. GGUF format. If you don't know what to run, run llama.cpp.\n- **MLX** (Apple) uses unified memory on M-series chips — fastest path on a Mac. PyTorch-shaped Python API.\n- **ExecuTorch** is PyTorch's mobile/edge runtime; produces `.pte` files for Android (NNAPI / Vulkan) and iOS (Core ML / MPS).\n- **A 4-bit Q4_K_M quantized 8B model fits in ~5 GB and runs at 5–15 tokens/sec on a modern phone.** Genuinely usable.\n- The unlock is **K-quants** (mixed precision per row) and Apple/ARM kernels that fuse dequant + matmul."
+  },
+  {
+    "slug": "/applied/serve/vllm-sglang",
+    "track": "applied",
+    "module": "applied/serve",
+    "title": "vLLM & SGLang",
+    "tldr": "- **vLLM** = the default inference server. PagedAttention, continuous batching, broad model support, well-documented. Easy to deploy.\n- **SGLang** = the throughput-focused alternative. **RadixAttention** for shared-prefix workloads, structured-output via constrained decoding (XGrammar), often **1.5–3× faster** on agent / chat workloads where prompts share long preambles.\n- **TGI (HuggingFace)** = the convenient choice if you're already in the HF ecosystem; ships less aggressive perf, more polish.\n- **TensorRT-LLM** = peak NVIDIA performance; pay in build complexity and Hopper-only optimizations.\n- **Pick by workload:** broad inference → vLLM. Many shared-prefix / agentic requests → SGLang. NVIDIA-native max throughput → TensorRT-LLM. Internal tooling within HF → TGI."
+  },
+  {
+    "slug": "/compilers/tvm-and-xla/torch-compile",
+    "track": "compilers",
+    "module": "compilers/tvm-and-xla",
+    "title": "torch.compile (Inductor)",
+    "tldr": "- `torch.compile(model)` swaps PyTorch's eager execution for **graph capture (Dynamo) + autograd compilation (AOTAutograd) + kernel codegen (Inductor)**.\n- **Dynamo** captures Python-level graphs by hooking into bytecode evaluation, falling back gracefully when it can't trace.\n- **AOTAutograd** lifts the Python autograd into a static forward+backward joint graph that the compiler can optimize together.\n- **Inductor** lowers the graph to **Triton kernels** for GPU and **C++ + OpenMP** for CPU. Fuses pointwise ops aggressively.\n- **Real-world wins:** **1.3–2× speedup on training**, **1.5–4× on inference**, mostly from kernel fusion and CUDA Graph capture. The default in PyTorch 2.5+."
+  },
+  {
+    "slug": "/foundations/cpp-memory/stack-vs-heap",
+    "track": "foundations",
+    "module": "foundations/cpp-memory",
+    "title": "Stack vs Heap",
+    "tldr": "- The **stack** is a fast, LIFO region of memory tied to function calls. Allocation is one register decrement; deallocation is automatic when the function returns.\n- The **heap** is a general-purpose region you allocate from explicitly (`new`, `malloc`). Allocation involves bookkeeping, can fragment, and you're responsible for freeing.\n- A stack allocation is typically **~1 ns**; a heap allocation is **~50–500 ns** depending on the allocator and contention.\n- ML systems code stays on the stack as much as possible — heap traffic on a hot path is a known performance killer."
+  },
+  {
+    "slug": "/llm-architecture/attention/flash-attn-3",
+    "track": "llm-architecture",
+    "module": "llm-architecture/attention",
+    "title": "FlashAttention-3",
+    "tldr": "- **Standard attention writes the $N \\times N$ matrix to HBM**, then reads it back. That's $O(N^2)$ memory traffic and is *the* bottleneck — not the FLOPs.\n- **FlashAttention-1/2** tile the computation, never materialize the full $N \\times N$ matrix in HBM, and use the **online softmax** trick to fuse softmax with matmul.\n- **FlashAttention-3 (2024)** rewrites for Hopper: TMA async copies, warp-specialized producer/consumer, FP8 with block-scaled accumulation. **~75% of H100 peak** for fp16/bf16, and FP8 throughput nearly doubles that.\n- Net effect on inference: same model, same numbers — **2–4× faster** attention layer, longer contexts feasible, lower memory pressure."
+  },
+  {
+    "slug": "/llm-architecture/attention/gqa-mqa-mla",
+    "track": "llm-architecture",
+    "module": "llm-architecture/attention",
+    "title": "GQA, MQA & MLA",
+    "tldr": "- **MHA** has one K/V head per Q head — every token's KV cache scales with $H$ heads. Memory bottleneck.\n- **MQA** (Shazeer, 2019): one K/V head shared across all Q heads. Cache shrinks $H\\times$. Quality drops noticeably at scale.\n- **GQA** (Ainslie et al., 2023): groups of Q heads share K/V. **Default** in Llama-3, Mistral, Qwen-2.5 — cache shrinks 4–8×, quality matches MHA.\n- **MLA** (DeepSeek-V2/V3, 2024): K/V projected into a low-rank **latent** space, decompressed only when needed. Cache shrinks **another ~10×** vs GQA, with quality matching or exceeding MHA.\n- **The tradeoff** is always cache size vs quality. As of April 2026, GQA is the floor and MLA is the frontier — Llama 4 (2025) adopted MLA-style compression in its largest variant."
+  },
+  {
+    "slug": "/llm-architecture/attention/rope-yarn",
+    "track": "llm-architecture",
+    "module": "llm-architecture/attention",
+    "title": "RoPE + YaRN / LongRoPE",
+    "tldr": "- **RoPE** (Rotary Positional Embedding, Su et al., 2021) encodes position by *rotating* query and key vectors in 2D pairs by an angle proportional to position. The dot product $\\langle q_m, k_n \\rangle$ then depends only on the *relative* position $m - n$.\n- It's the de facto standard in 2024–2026: Llama family, Mistral, Qwen, DeepSeek, Gemma all use it.\n- **The base wavelength $\\theta$ controls how far the model can extrapolate.** Standard $\\theta = 10{,}000$ caps at ~4–8K tokens. Beyond that, attention scores collapse.\n- **NTK-aware / YaRN / LongRoPE** are the three rescaling techniques that extend a model's context to 32K → 128K → 1M tokens with light continued pretraining.\n- For inference, **PI (Position Interpolation)**, **NTK-by-parts**, and **YaRN** are the three you'll see in real configs. **LongRoPE** (2024) is the current frontier for 2M+ token contexts."
+  },
+  {
+    "slug": "/llm-architecture/inference-time/spec-decoding",
+    "track": "llm-architecture",
+    "module": "llm-architecture/inference-time",
+    "title": "Speculative Decoding",
+    "tldr": "- A **small draft model** generates $K$ candidate tokens. The **big target model** verifies all $K$ in a single forward pass. Accepted tokens become output; rejected ones trigger a fallback sample.\n- The math: a single $K$-token target forward is much cheaper than $K$ sequential forwards. As long as the draft is **right most of the time**, you get **2–3× decode speedup** with **zero distribution change**.\n- **EAGLE-3** (2024–2025) is the current frontier — auto-regressive draft heads attached to the target, ~80% acceptance rate, ~3× speedup on common workloads.\n- **Medusa** uses parallel multi-token prediction heads on the target itself. Simpler than draft-model methods; ~2× speedup.\n- **Lookahead / PLD** (Prompt Lookup Decoding) needs no draft model — speculates from n-grams in the prompt. Free at inference time; works best on summarization / repetitive output."
+  },
+  {
+    "slug": "/llm-architecture/kv-cache/kv-basics",
+    "track": "llm-architecture",
+    "module": "llm-architecture/kv-cache",
+    "title": "KV Cache Basics",
+    "tldr": "- Without a KV cache, every token would re-attend over the entire prompt. With it, each new token does *one* extra row of attention math.\n- The cache is `2 × n_layers × n_kv_heads × head_dim × seq_len × dtype_bytes`. For Llama 3.1 70B at 8K context that's **~10 GB** — often more than the weights.\n- The cache lives on the GPU and grows linearly with each generated token. Long contexts OOM on the cache long before they OOM on weights.\n- Every modern serving optimization (PagedAttention, prefix caching, MLA, KV quantization) is fundamentally about managing this one buffer."
+  },
+  {
+    "slug": "/llm-architecture/kv-cache/paged-attention",
+    "track": "llm-architecture",
+    "module": "llm-architecture/kv-cache",
+    "title": "PagedAttention (vLLM)",
+    "tldr": "- The naive KV cache reserves a contiguous slab equal to the *max* context for each sequence. Most sequences are shorter — **60–80% of GPU memory is wasted on internal fragmentation**.\n- **PagedAttention** (Kwon et al., SOSP 2023, the vLLM paper) treats the cache like an OS treats virtual memory: small fixed-size **blocks** + per-sequence **block tables** + a **block allocator**.\n- Result: **2–4× higher throughput** than HuggingFace TGI on the same hardware. vLLM's defaults match the paper's design.\n- **vLLM v1** (late 2024) refactored the engine around chunked prefill + PagedAttention as the unified primitive. **SGLang's RadixAttention** is the alternative paradigm — same paged storage, plus prefix-tree sharing.\n- This is the single most impactful kernel-level change in LLM serving since FlashAttention. Required reading."
+  },
+  {
+    "slug": "/ml-execution/gpu-fundamentals/gemm",
+    "track": "ml-execution",
+    "module": "ml-execution/gpu-fundamentals",
+    "title": "GEMM (Hopper / Blackwell)",
+    "tldr": "- **GEMM** = General Matrix Multiplication. **`C = α·A·B + β·C`**. ~80% of LLM training and inference flops live here.\n- A naive matmul reads each input element $O(N)$ times — fully memory-bound. Production kernels do **cache blocking** at multiple levels (registers, shared memory, L2) so each byte from HBM gets reused $\\sim 64–256\\times$.\n- On Hopper / Blackwell, the kernel structure is **TMA + WGMMA + warp specialization** — async copies overlap with tensor-core matmul, and producer/consumer warps split the work.\n- **CUTLASS 4** (NVIDIA) and **Triton 3.x** are the two ways most teams write it in 2026. Hand-tuned CUTLASS still wins by 5–10% on edge shapes; Triton wins on developer time.\n- For LLM inference at small batch (decode), GEMM becomes **GEMV** — different optimization regime, memory-bound, where INT4/FP8 weight quant rules."
+  },
+  {
+    "slug": "/training/distributed/fsdp",
+    "track": "training",
+    "module": "training/distributed",
+    "title": "ZeRO & FSDP2",
+    "tldr": "- **DDP** replicates the full model on every rank. Out of memory at large scale.\n- **ZeRO** (Rajbhandari et al., 2020) progressively shards what's replicated: stages 1 (optimizer state), 2 (+ gradients), 3 (+ parameters). Stage 3 = the whole model lives across ranks; only the active layer is materialized.\n- **FSDP** is PyTorch's ZeRO-3 (2022). **FSDP2** (2024) replaces module-level sharding with **per-parameter sharding via DTensor**, composes cleanly with TP/PP, much faster wraps, simpler code.\n- For a 70B BF16 model on 8 GPUs: DDP doesn't fit at all. FSDP2 fits with room for a 32K-token batch.\n- Default in production through 2026: **FSDP2 (HSDP)** — hybrid sharding within a node + replication across nodes — composed with tensor parallel and pipeline parallel for very large runs."
+  },
+  {
+    "slug": "/training/optimization/backprop",
+    "track": "training",
+    "module": "training/optimization",
+    "title": "Backprop as a Graph",
+    "tldr": "- Backprop isn't really about derivatives — those are bookkeeping. It's about **executing a computational graph backward**, with the **forward activations** as the binding state.\n- Activations dominate training memory. For a 7B model at 8K context, activations can exceed weights by 5–10× without checkpointing.\n- PyTorch's autograd records a tape of operations during forward; backward replays it in reverse, freeing tensors as soon as their gradient is computed.\n- **VJP** (Vector-Jacobian Product) is the right mental model — `.backward()` doesn't compute Jacobians, it computes $J^\\top v$ for some upstream $v$, one op at a time.\n- The big systems consequence: **gradient checkpointing** trades compute for memory by *recomputing* activations during backward instead of storing them."
+  },
+  {
+    "slug": "/training/optimization/fp8-training",
+    "track": "training",
+    "module": "training/optimization",
+    "title": "FP8 Training (DeepSeek-V3 Recipe)",
+    "tldr": "- **FP8 training** runs forward and backward passes in 8-bit floats (E4M3 or E5M2), with a **higher-precision master copy** of weights and a **scaling strategy** to keep values in dynamic range.\n- On H100/B200, FP8 GEMM is **~2× the throughput** of BF16 on tensor cores. End-to-end training is typically **1.4–1.8× faster** wall-clock than BF16, with no quality regression at scale.\n- **DeepSeek-V3** (Dec 2024) is the most-cited public recipe: per-tile/per-block scaling, FP8 forward + backward, FP32 master + FP32 reduce-scatter, \"increased-accuracy accumulation\" via partial sums in FP32.\n- **Blackwell B200/B300 (2025)** added **NVFP4** (4-bit float) and **MXFP8** (block-scaled 8-bit) in tensor cores, opening the door to 4-bit training experiments through 2025–2026.\n- Below-frontier scale, **BF16 + FP8 inference** is more common than FP8 training. The training recipe is heavyweight; test on a 1–7B model before committing."
+  },
+  {
+    "slug": "/training/optimization/optimizers",
+    "track": "training",
+    "module": "training/optimization",
+    "title": "AdamW → Lion → Muon",
+    "tldr": "- **SGD-momentum** uses one running average of gradients. Cheap (1× param state) but slow on ill-conditioned losses.\n- **Adam / AdamW** add a per-parameter scaling via second-moment estimates. Costs **2× param state** in optimizer memory but converges robustly. **The default** for ~all LLM pretraining 2018–2024.\n- **Lion** (Chen et al., 2023): one running average, sign-of-update only. Cuts optimizer state to **1×** params, often matches AdamW. Used in PaLM follow-ups, occasionally in Llama-class runs.\n- **Muon** (Jordan et al., 2024): orthogonalize updates via Newton-Schulz iteration. **Frontier** for hidden-layer parameters in 2024–2025; Llama-4 reportedly uses Muon-flavored optimizers in 2025.\n- **Sophia** (Hessian-aware) was a 2023 candidate; mostly displaced by Lion/Muon in 2025 due to compute cost."
+  },
+  {
+    "slug": "/training/post-training/grpo-reasoning",
+    "track": "training",
+    "module": "training/post-training",
+    "title": "GRPO & RL Reasoning",
+    "tldr": "- **GRPO** (Group Relative Policy Optimization) is the RL algorithm DeepSeek used for R1. It removes PPO's value function — uses **group-relative advantages** instead.\n- **The training signal is verifiable**: math problems checked by a parser, code checked by unit tests. No reward model, no human labels.\n- The model learns to **emit long chain-of-thought** by RL on this signal alone — DeepSeek-R1-Zero went from 15% → 71% on AIME with no SFT, just GRPO on math.\n- **R1 final** uses cold-start SFT → GRPO → SFT-on-best-rollouts → another GRPO pass. The \"aha moment\" — the model spontaneously starts saying \"Wait, let me reconsider\" — emerged purely from the RL signal.\n- **OpenAI's o1/o3** family is widely believed to use a similar (proprietary) RL-on-reasoning recipe. As of April 2026, GRPO and its variants are the dominant post-training paradigm for reasoning models."
+  },
+  {
+    "slug": "/training/post-training/lora-qlora",
+    "track": "training",
+    "module": "training/post-training",
+    "title": "LoRA, QLoRA & DoRA",
+    "tldr": "- **LoRA** trains two small low-rank matrices `A` and `B` instead of the full weight `W`. Update is `W + (B·A) × scale`. Storage and gradient memory drop ~100×.\n- **QLoRA** keeps the base model's weights frozen and quantized to **NF4** (4-bit), only LoRA adapters are FP16. This is what lets you fine-tune **Llama-3-70B on a single 80 GB GPU**.\n- **DoRA** decomposes weight updates into magnitude + direction. Closes most of the gap between LoRA and full fine-tuning at small additional cost.\n- Production serving uses **multi-LoRA** (S-LoRA, vLLM `--enable-lora`) — one base model, many tenant-specific adapters hot-swapped per request.\n- **Rule of thumb:** rank `r=16, alpha=32` is the sane default. Bump `r` to 64 only if you can't fit the task otherwise."
+  }
+]

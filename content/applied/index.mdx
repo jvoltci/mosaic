@@ -1,0 +1,34 @@
+---
+title: Applied AI · Build & Ship
+description: Build cutting-edge AI apps you can run on your phone — and ship them.
+---
+
+import { TrackBanner } from '../../components/TrackBanner'
+
+<TrackBanner
+  track="applied"
+  icon="06"
+  eyebrow="Track 06 · Applied AI · Build & Ship"
+  title="Build cutting-edge things. Run them on your phone. Ship them."
+  subtitle="The track that turns the systems knowledge into working products. Every lesson has a runnable artifact — most work in a Colab tab open on your phone. By the end you've built a RAG agent, a voice assistant, an on-device LLM, and shipped a capstone."
+/>
+
+## Modules in this track
+
+- **[Talking to LLMs](/applied/llm-basics)** — prompting, structured output, tool use, embeddings
+- **[RAG & Agents](/applied/rag-agents)** — retrieval, ReAct loops, multi-agent, MCP servers
+- **[Serve & Ship](/applied/serve)** — vLLM, on-device inference, cost optimization, observability
+- **[Frontier & Capstone](/applied/frontier)** — multimodal, voice, safety, ship a production RAG-agent
+
+## What you'll build
+
+By the end of this track, your repo has:
+
+- A 3-tool function-calling assistant (Claude API, Colab notebook)
+- A RAG over 200 arXiv papers (hybrid search + cross-encoder reranker)
+- A ReAct agent solving SWE-style tasks (80 lines, no LangChain)
+- A 4-bit quantized LLM running on your phone via llama.cpp
+- A real-time voice agent (Whisper → Claude → Kokoro TTS)
+- A production-grade RAG-agent deployed to Vercel/Modal with eval suite + Langfuse tracing
+
+Each lesson links to a runnable Colab so you can hit the API or run the model on your phone's browser. No setup beyond opening a tab.

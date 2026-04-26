@@ -1,0 +1,26 @@
+---
+title: GPU Fundamentals
+description: Streaming Multiprocessors, warps, shared memory — the hardware mental model behind every CUDA kernel.
+---
+
+# GPU Fundamentals
+
+GPUs are not just "fast CPUs". They're a different machine with a different cost model: enormous bandwidth, tiny per-thread state, painfully slow scalar code. To write fast kernels, you have to think in their terms.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/ml-execution/gpu-fundamentals/gemm', title: 'GEMM (Hopper / Blackwell)', estMin: 18 },
+  ]}
+/>
+
+> More lessons coming: SM & Warp Architecture · Thread Hierarchy · Shared Memory
+
+<Capstone
+  title="Beat cuBLAS at small-N GEMM in Triton"
+  pitch="Write a tiled matmul kernel that outperforms cuBLAS for matrices ≤ 2048×2048 — and ship the proof."
+  what="Implement a Triton kernel for 16-bit GEMM with shared-memory tiling, warp-level mma, and autotuning. Benchmark vs cuBLAS across N = 256, 512, 1024, 2048. Use ncu to inspect the issued instructions and confirm you're hitting tensor cores."
+  sota={['Triton 3.x', 'CUDA 12+', 'ncu (Nsight Compute)', 'CUTLASS reference', 'tensor cores (mma.sync)']}
+  device="colab"
+  time="One weekend"
+  level="advanced"
+/>

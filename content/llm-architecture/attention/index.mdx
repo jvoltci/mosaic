@@ -1,0 +1,28 @@
+---
+title: Attention
+description: MHA, GQA, MQA, MLA, RoPE, and FlashAttention — the attention block from a memory-and-compute lens.
+---
+
+# Attention
+
+Attention is the heart of the Transformer. It's also the most memory-hungry, latency-sensitive, and innovation-rich block — which is why most production tricks (FlashAttention, GQA, MLA, RoPE) target it specifically.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/llm-architecture/attention/gqa-mqa-mla', title: 'GQA, MQA & MLA', estMin: 14 },
+    { slug: '/llm-architecture/attention/rope-yarn', title: 'RoPE + YaRN / LongRoPE', estMin: 14 },
+    { slug: '/llm-architecture/attention/flash-attn-3', title: 'FlashAttention-3', estMin: 16 },
+  ]}
+/>
+
+> More lessons coming: Multi-Head Attention foundations · Sliding window · NSA
+
+<Capstone
+  title="Implement attention from scratch — including the FlashAttention tile"
+  pitch="The attention block as it actually runs in production. Built. Verified against Llama-3.2-1B."
+  what="In ~300 lines of PyTorch: implement multi-head, GQA, RoPE, and a tiled FlashAttention-style forward pass. Verify outputs match Llama-3.2-1B's attention layer to numeric tolerance. Benchmark naive vs tiled at sequence length 4096 and watch HBM traffic drop."
+  sota={['PyTorch 2.x', 'Llama-3.2-1B (reference)', 'FlashAttention paper (Dao et al.)', 'torch.profiler', 'rotary_embedding (reference)']}
+  device="colab"
+  time="One weekend"
+  level="advanced"
+/>

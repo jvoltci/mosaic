@@ -1,0 +1,168 @@
+---
+title: AdamW → Lion → Muon
+description: The optimizer lineage frontier labs actually use — and why each step happened.
+---
+
+# AdamW → Lion → Muon
+
+## TL;DR
+
+- **SGD-momentum** uses one running average of gradients. Cheap (1× param state) but slow on ill-conditioned losses.
+- **Adam / AdamW** add a per-parameter scaling via second-moment estimates. Costs **2× param state** in optimizer memory but converges robustly. **The default** for ~all LLM pretraining 2018–2024.
+- **Lion** (Chen et al., 2023): one running average, sign-of-update only. Cuts optimizer state to **1×** params, often matches AdamW. Used in PaLM follow-ups, occasionally in Llama-class runs.
+- **Muon** (Jordan et al., 2024): orthogonalize updates via Newton-Schulz iteration. **Frontier** for hidden-layer parameters in 2024–2025; Llama-4 reportedly uses Muon-flavored optimizers in 2025.
+- **Sophia** (Hessian-aware) was a 2023 candidate; mostly displaced by Lion/Muon in 2025 due to compute cost.
+
+## Why this matters
+
+For a 70B AdamW run, optimizer state is ~280 GB — **2× the weights**. That's why FSDP + ZeRO matter, and why Lion/Muon's lower-state variants are economically meaningful. Saving optimizer state often dominates checkpoint size; saving optimizer state per-step dominates inter-GPU communication in Tensor Parallel.
+
+Also: **AdamW is not always the best choice.** Lion at the same learning rate often equals or beats AdamW on language modeling with half the memory. The community switched from "AdamW always" to "test the new ones on your run" sometime in 2024.
+
+## Mental model — what each adds over plain SGD
+
+```mermaid
+flowchart TD
+  SGD[SGD: x_{t+1} = x_t - η · g_t] --> SM[+ momentum: m_t = β·m_{t-1} + g_t]
+  SM --> Adam[+ per-param scaling: divide by √v_t]
+  Adam --> AdamW[+ decoupled weight decay]
+  AdamW --> Lion[Lion: throw away v_t, take sign(m_t)]
+  AdamW --> Muon[Muon: orthogonalize the update with Newton-Schulz]
+```
+
+Each step trades cost for capability or strips away a redundant component.
+
+## Concrete walkthrough
+
+### SGD with momentum
+
+```
+m_t = β · m_{t-1} + g_t
+x_t = x_{t-1} - η · m_t
+```
+
+State per parameter: 1 buffer ($m$). Cheap. Hyperparameters: $\eta, \beta$.
+
+### AdamW (the workhorse)
+
+```
+m_t = β1 · m_{t-1} + (1 - β1) · g_t
+v_t = β2 · v_{t-1} + (1 - β2) · g_t²
+m̂_t = m_t / (1 - β1^t)              # bias correction
+v̂_t = v_t / (1 - β2^t)
+x_t = x_{t-1} - η · ( m̂_t / (√v̂_t + ε) + λ · x_{t-1} )   # decoupled WD
+```
+
+State per parameter: 2 buffers ($m$, $v$). Total optimizer memory ~ **2 × params** at the parameter dtype, often plus FP32 master copies (so 8 bytes × params for FP32 master + 4 bytes × params for $m, v$ in BF16 ≈ **12 bytes / parameter**).
+
+For 70B params, that's ~840 GB of optimizer state if everything is FP32. In practice you keep $m, v$ in BF16 (FP32 master remains), reducing to ~420 GB. ZeRO-1 / FSDP shard this across data-parallel ranks.
+
+**Why decoupled weight decay (the W in AdamW)?** Vanilla Adam adds weight decay through $g_t \mathrel{+}= \lambda x$, which gets divided by $\sqrt{v_t}$ — making the effective decay strength parameter-specific. AdamW applies decay directly to $x_t$, decoupled from the gradient scaling. Result: weight decay actually does what you think it does.
+
+### Lion (the surprising minimalist)
+
+```
+c_t = β1 · m_{t-1} + (1 - β1) · g_t       # interpolated direction
+x_t = x_{t-1} - η · ( sign(c_t) + λ · x_{t-1} )
+m_t = β2 · m_{t-1} + (1 - β2) · g_t       # update momentum (with different β2 than usage)
+```
+
+State per parameter: **1 buffer** ($m$). Half the optimizer memory of AdamW.
+
+The radical move is `sign()` — every update component is ±1, scaled by the learning rate. No second moments. No per-parameter scaling. Discovered via symbolic search by Google Brain (Chen et al., 2023). Empirically matches AdamW on many language tasks; needs a smaller learning rate (typically 1/3 to 1/10 of AdamW's).
+
+### Muon (the 2024 frontier)
+
+Muon orthogonalizes the momentum-buffered update via a few Newton-Schulz iterations *for hidden 2D weight matrices only* (embedding and output layers stay AdamW). The intuition: gradient updates for matmul weights have a meaningful "preferred direction"; orthogonalizing the update preserves expressiveness and acts as a kind of preconditioner.
+
+```python
+def muon_step(W, m, lr, ns_steps=5):
+    """Muon: momentum buffer + Newton-Schulz orthogonalization."""
+    update = m + g          # momentum-buffered grad
+    # Newton-Schulz iterates the matrix toward its "orthogonal" version
+    X = update / update.norm()
+    for _ in range(ns_steps):
+        A = X @ X.T
+        B = -2.0 * A + 1.5 * (A @ A)   # quintic NS iteration
+        X = (1.5 * X) - (B @ X)
+    W -= lr * X
+    return W
+```
+
+State: 1 buffer ($m$), like Lion. Compute: a few extra matmuls per step (the NS iterations) — meaningful but small fraction of total.
+
+Empirically: ~30% faster convergence per token on small/medium models, and the gap holds at scale in the public reports through 2024. Used in production by labs through 2025; see Llama-4 family release notes for hybrid AdamW-Muon configs.
+
+## Real-world picks (April 2026)
+
+| Use case | Optimizer | Why |
+| --- | --- | --- |
+| Pretraining, big LLM | **AdamW** (still the safest default) | Production-validated, no surprises |
+| Pretraining, frontier labs experimenting | **Muon for hidden, AdamW for embeddings/heads** | 30% faster convergence on a curve that compounds |
+| Resource-constrained pretraining | **Lion** | Half the optimizer memory, often equal quality |
+| LoRA / fine-tuning | **AdamW with paged optimizers (bitsandbytes)** | Adapters are tiny anyway; reuse what works |
+| RL post-training (PPO, GRPO) | **AdamW** | RL stability is fragile; don't change two things at once |
+
+## Run it in your browser — optimizer memory cost
+
+<RunInBrowser
+  description="Compare optimizer state across SGD, AdamW, Lion, Muon for several model sizes."
+  code={`def state_bytes(params, optimizer, dtype_bytes=2, fp32_master=True):
+    """Optimizer state size in bytes — excludes the params themselves."""
+    base = 4 if fp32_master else 0  # FP32 master copy of params
+    if optimizer == 'sgd':       state = 1 * dtype_bytes
+    elif optimizer == 'adamw':   state = 2 * dtype_bytes
+    elif optimizer == 'lion':    state = 1 * dtype_bytes
+    elif optimizer == 'muon':    state = 1 * dtype_bytes      # plus tiny NS scratch, ignored
+    return params * (base + state)
+
+for params_b in [1, 7, 70, 405]:
+    params = params_b * 1e9
+    print(f"\\n--- {params_b}B model ---")
+    for opt in ['sgd', 'adamw', 'lion', 'muon']:
+        gb = state_bytes(params, opt) / 1024**3
+        print(f"  {opt:<6}  optimizer state = {gb:>7.1f} GB  ({gb / params_b:.2f} GB per B params)")
+`}
+/>
+
+Notice AdamW's state is ~50% larger than Lion/Muon's — that's the practical motivation for switching, on top of any quality story.
+
+## Quick check
+
+<Quiz
+  question="You're constrained to 80 GB of GPU memory and want to train a 13B model. AdamW is OOMing on optimizer state alone. Which is the most practical fix that doesn't change architectures?"
+  options={[
+    'Switch to SGD with momentum.',
+    'Switch to Lion or Muon — same compute, half the optimizer state.',
+    'Reduce the learning rate.',
+    'Use a smaller batch size.',
+  ]}
+  answer={1}
+  explanation="Lion and Muon need ~50% less optimizer memory than AdamW (one buffer vs two). On language modeling, Lion typically matches AdamW at a smaller lr; Muon often beats it. SGD-momentum saves the same memory but is dramatically slower to converge on language modeling. Reducing lr/batch doesn't help with optimizer state."
+/>
+
+## Key takeaways
+
+1. **AdamW remains the safe default** for pretraining. Production-validated, well-tooled.
+2. **Lion and Muon halve the optimizer state.** Real money for big runs; rough quality parity (Lion) or improvement (Muon) on language modeling.
+3. **Muon orthogonalizes hidden-layer updates.** Acts as a cheap preconditioner. Frontier choice in 2024–2025.
+4. **Decoupled weight decay (the W in AdamW) is not optional.** Plain Adam's coupled WD has parameter-specific effective strength.
+5. **Hybrid configurations are common** — Muon for big matmul weights, AdamW for embeddings and heads where the math is different.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'paper', href: 'https://arxiv.org/abs/1711.05101', title: 'Decoupled Weight Decay Regularization (AdamW)', author: 'Loshchilov & Hutter (2017)', note: 'The W. Short, foundational.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2302.06675', title: 'Symbolic Discovery of Optimization Algorithms (Lion)', author: 'Chen, Liang, Huang et al. (Google Brain, 2023)', note: 'The Lion paper. Symbolic search found this; humans didn\'t design it.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2410.21276', title: 'Muon: An Optimizer for Hidden Layers in Neural Networks', author: 'Jordan, Jin et al. (2024)', note: 'The Muon paper. Newton-Schulz orthogonalization plus momentum.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2305.14342', title: 'Sophia: A Scalable Stochastic Second-order Optimizer', author: 'Liu et al. (2023)', note: 'Hessian-aware. Mostly displaced by 2025 but the framing is worth the read.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=fDhNrsm03TU', title: 'Sebastian Raschka — Optimizers for Deep Learning', author: 'Sebastian Raschka', note: 'Deep visual walkthrough of SGD → Adam → AdamW.' },
+    { kind: 'blog', href: 'https://kellerjordan.github.io/posts/muon/', title: 'Keller Jordan — Muon explained', author: 'Keller Jordan (lead author)', note: 'Author-written blog. Best non-paper Muon explainer.' },
+    { kind: 'repo', href: 'https://github.com/lucidrains/lion-pytorch', title: 'lucidrains/lion-pytorch', note: 'Drop-in Lion implementation in PyTorch. ~80 lines.' },
+    { kind: 'repo', href: 'https://github.com/KellerJordan/Muon', title: 'KellerJordan/Muon', note: 'Reference Muon implementation.' },
+    { kind: 'blog', href: 'https://magazine.sebastianraschka.com/p/why-the-new-llms-use-an-mlp-and-the-optimizer-zoo', title: 'Sebastian Raschka — current optimizer landscape (2025)', note: 'Most recent literature digest covering 2024-2025 results.' },
+  ]}
+/>
+
+<LessonComplete />

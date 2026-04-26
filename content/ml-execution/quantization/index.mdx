@@ -1,0 +1,20 @@
+---
+title: Quantization
+description: Compressing models from FP16 to INT8 / INT4 without breaking them — and the kernels that make it fast.
+---
+
+# Quantization
+
+Memory bandwidth, not compute, is the bottleneck for most LLM inference. Quantization is how you move less data — store weights at 4 or 8 bits, expand them only when you need to compute. The tradeoff: a small accuracy hit for a large speedup.
+
+> Lessons coming: FP8 Inference · INT4 / AWQ / GPTQ · MXFP4 / NVFP4 (Blackwell) · Rotation Quantization (QuaRot, SpinQuant)
+
+<Capstone
+  title="A 4-bit Llama running on your phone"
+  pitch="Llama-3.2-3B — quantized to 2 GB, decoded at 12+ tok/sec on the phone in your pocket. Offline. No cloud."
+  what="Take Llama-3.2-3B-Instruct from Hugging Face. Convert to GGUF. Quantize to Q4_K_M (the 2026 sweet spot). Build llama.cpp for Android (or iOS). Drop the GGUF on your phone, run it, measure tokens/sec on real thermals. Wrap in a 50-line chat UI."
+  sota={['llama.cpp', 'GGUF format', 'Q4_K_M K-quants', 'Android NDK / iOS Metal', 'Llama-3.2-3B-Instruct']}
+  device="phone"
+  time="One Saturday"
+  level="intermediate"
+/>

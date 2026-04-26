@@ -1,0 +1,20 @@
+---
+title: MLIR
+description: Multi-Level IR — how the modern ML compiler stack represents tensor programs at the right level of abstraction at every step.
+---
+
+# MLIR
+
+MLIR (Multi-Level Intermediate Representation) is the backbone of the modern ML compiler stack — Google's IREE, Apple's silicon stack, AMD ROCm, and torch-mlir all speak it. Its core idea: don't try to represent everything at one level. Have many *dialects*, lower from one to the next, and run optimizations at the level where they're cheapest.
+
+> Lessons coming: MLIR Mental Model · Dialects (linalg, tensor, gpu, llvm) · Lowering Pipelines · Writing a Pass
+
+<Capstone
+  title="Lower a linalg program to LLVM dialect"
+  pitch="Watch a tensor expression become a loop nest become a register-allocated function — one dialect at a time."
+  what="Hand-write a tiny matmul in `linalg` dialect (5 lines). Use `mlir-opt` to lower through `linalg → affine → scf → memref → llvm`. Save the IR at each stage. Translate the final llvm dialect to actual LLVM IR with `mlir-translate`, then to machine code with `llc`. Pin the chain of transformations to your wall."
+  sota={['MLIR (LLVM 18+)', 'mlir-opt', 'mlir-translate', 'StableHLO (for context)', 'tutorial dialects (Toy)']}
+  device="laptop"
+  time="One long evening"
+  level="advanced"
+/>

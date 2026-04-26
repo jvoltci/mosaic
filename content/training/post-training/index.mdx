@@ -1,0 +1,27 @@
+---
+title: Post-Training & RLHF
+description: SFT, LoRA, DPO, and the GRPO recipe behind DeepSeek-R1.
+---
+
+# Post-Training & RLHF
+
+A pretrained model is raw clay. Post-training is what turns it into something you'd use — instruction-following, preference-aligned, and (in the o1/R1 era) actually reasoning. Every lesson here has a runnable Colab.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/training/post-training/lora-qlora', title: 'LoRA / QLoRA / DoRA', estMin: 16 },
+    { slug: '/training/post-training/grpo-reasoning', title: 'GRPO & RL Reasoning', estMin: 16 },
+  ]}
+/>
+
+> More lessons coming: SFT & Instruction Tuning · DPO / IPO / KTO
+
+<Capstone
+  title="QLoRA your own data into a 1B model — and ship a chatbot"
+  pitch="Take an open base model. Teach it your domain in an afternoon. Serve it from a URL by Sunday night."
+  what="Curate a 5K-row instruction dataset from your own domain (notes, support tickets, book chapters). QLoRA-finetune Llama-3.2-1B-Instruct on a free Colab T4. Merge the adapter. Serve via vLLM with --enable-lora. Wrap in a 100-line FastAPI chat endpoint. Deploy to Modal."
+  sota={['transformers', 'peft', 'trl', 'bitsandbytes (NF4)', 'vLLM (multi-LoRA)', 'Modal serverless GPU']}
+  device="colab"
+  time="One weekend"
+  level="intermediate"
+/>

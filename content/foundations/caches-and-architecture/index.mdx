@@ -1,0 +1,20 @@
+---
+title: Caches & Hardware Reality
+description: Cache lines, branch prediction, data-oriented design — why your code's speed is determined by the silicon, not the algorithm.
+---
+
+# Caches & Hardware Reality
+
+Two algorithms with the same big-O can differ by 10× because one respects the cache hierarchy and the other doesn't. This module is about the silicon-level facts that the language standard hides from you.
+
+> Lessons coming: Cache Lines & Spatial Locality · Branch Prediction · NUMA & Topology · Profiling Tools (perf, ncu, eBPF)
+
+<Capstone
+  title="Find the slowest cache miss in your code"
+  pitch="The cache miss costing your kernel a third of its runtime — find it, name it, fix it."
+  what="Take a deliberately bad-locality program (provided), profile with Linux perf + cachegrind, identify the dominant cache miss pattern, fix it, plot before/after on a flame graph. Apply the same pattern to a real ML kernel from PyTorch."
+  sota={['Linux perf', 'cachegrind', 'FlameGraph', 'pmu-tools', 'Intel VTune (optional)']}
+  device="laptop"
+  time="One evening"
+  level="foundational"
+/>

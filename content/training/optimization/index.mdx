@@ -1,0 +1,28 @@
+---
+title: Optimization
+description: Backprop, optimizers, learning-rate schedules, FP8 training — the numerics under every training run.
+---
+
+# Optimization
+
+Training is a graph-execution problem before it's a calculus problem. This module rebuilds your mental model around what actually happens when `.backward()` runs, what each optimizer step costs in memory, and why FP8 is now the production default for frontier-scale runs.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/training/optimization/backprop', title: 'Backprop as a Graph', estMin: 14 },
+    { slug: '/training/optimization/optimizers', title: 'AdamW → Lion → Muon', estMin: 15 },
+    { slug: '/training/optimization/fp8-training', title: 'FP8 Training (DeepSeek-V3 recipe)', estMin: 16 },
+  ]}
+/>
+
+> More lessons coming: LR Schedules & WSD · Loss Functions for LMs
+
+<Capstone
+  title="Train your first GPT — and prove Muon beats AdamW"
+  pitch="A 30M-param GPT trained on TinyStories from scratch in 4 hours of free Colab. Plot AdamW vs Lion vs Muon and stake a position."
+  what="Pretrain a tiny GPT (4 layers, 384-dim, 30M params) on the TinyStories dataset. Train three identical runs with AdamW, Lion, and Muon. Same data, same seed, same compute. Measure loss curves, optimizer-state memory, and final perplexity. Settle the argument."
+  sota={['PyTorch 2.x', 'TinyStories dataset', 'Muon optimizer (Jordan et al., 2024)', 'wandb for tracking']}
+  device="colab"
+  time="One weekend (~4-6 hours of training)"
+  level="intermediate"
+/>

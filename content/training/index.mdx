@@ -1,0 +1,27 @@
+---
+title: Training & RLHF
+description: How modern LLMs are actually trained, end to end — optimizers, parallelism, fine-tuning, preference optimization, RL on reasoning.
+---
+
+import { TrackBanner } from '../../components/TrackBanner'
+
+<TrackBanner
+  track="training"
+  icon="03"
+  eyebrow="Track 03 · Training & RLHF"
+  title="How modern LLMs are actually trained, end to end."
+  subtitle="The full pipeline behind a frontier model — backprop as a graph problem, the optimizer lineage from AdamW to Muon, FP8 training, the 4D parallelism mesh, SFT, LoRA/QLoRA, DPO, and the GRPO recipe that made DeepSeek-R1 work."
+/>
+
+## Modules in this track
+
+- **[Optimization](/training/optimization)** — backprop, optimizers, LR schedules, FP8 training
+- **[Distributed Training](/training/distributed)** — data / tensor / pipeline parallel, ZeRO + FSDP2
+- **[Post-Training & RLHF](/training/post-training)** — SFT, LoRA/QLoRA, DPO, GRPO on reasoning
+
+## What you'll be able to do after
+
+- Read a frontier-model tech report (DeepSeek-V3, Llama-3) and follow every word
+- Fine-tune a 7B model on your own domain with QLoRA in a Colab notebook
+- Reason about why a particular training stack picks a particular parallelism config
+- Implement DPO from scratch and explain when to use it over PPO

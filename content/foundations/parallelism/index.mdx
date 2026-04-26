@@ -1,0 +1,20 @@
+---
+title: Parallelism & SIMD
+description: Threads, lock-free data structures, and how to use vector instructions to multiply throughput per clock cycle.
+---
+
+# Parallelism & SIMD
+
+Modern CPUs give you parallelism at three levels: across cores (threads), within a single core (instruction-level), and within a single instruction (SIMD). ML kernels exploit all three.
+
+> Lessons coming: OS-Level Threading · Async Runtimes · SIMD Intrinsics (AVX-512, NEON, SVE2)
+
+<Capstone
+  title="Lock-free SPSC ring buffer that beats std::queue 50×"
+  pitch="The 100-line atomic queue every low-latency ML server uses — built from scratch."
+  what="Implement a single-producer single-consumer ring buffer with std::atomic, correct memory orders, and false-sharing avoidance. Benchmark against std::queue+mutex on 1M messages. Run with ThreadSanitizer to prove correctness."
+  sota={['C++20 atomics', 'std::memory_order', 'ThreadSanitizer', 'cache line padding', 'folly::ProducerConsumerQueue (reference)']}
+  device="laptop"
+  time="One weekend"
+  level="intermediate"
+/>

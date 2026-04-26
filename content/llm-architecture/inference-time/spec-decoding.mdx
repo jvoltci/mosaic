@@ -1,0 +1,170 @@
+---
+title: Speculative Decoding
+description: A small draft model speculates, the big model verifies — 2–3× decode speedup with no quality loss.
+---
+
+# Speculative Decoding
+
+## TL;DR
+
+- A **small draft model** generates $K$ candidate tokens. The **big target model** verifies all $K$ in a single forward pass. Accepted tokens become output; rejected ones trigger a fallback sample.
+- The math: a single $K$-token target forward is much cheaper than $K$ sequential forwards. As long as the draft is **right most of the time**, you get **2–3× decode speedup** with **zero distribution change**.
+- **EAGLE-3** (2024–2025) is the current frontier — auto-regressive draft heads attached to the target, ~80% acceptance rate, ~3× speedup on common workloads.
+- **Medusa** uses parallel multi-token prediction heads on the target itself. Simpler than draft-model methods; ~2× speedup.
+- **Lookahead / PLD** (Prompt Lookup Decoding) needs no draft model — speculates from n-grams in the prompt. Free at inference time; works best on summarization / repetitive output.
+
+## Why this matters
+
+LLM decode is **memory-bound**: each token reads the entire model from HBM. The compute for one forward is barely used (batch 1 = empty SMs). Speculative decoding turns this into a budget — *use the spare compute to verify multiple candidate tokens at once*. Same memory traffic, more output tokens.
+
+The result is the only "free lunch" in modern inference: no quality loss, real throughput gain. As of April 2026 it's standard in vLLM, SGLang, TGI, TensorRT-LLM.
+
+## Mental model
+
+```mermaid
+flowchart LR
+  T[Token at step n] --> D[Draft model: predicts t_{n+1}, t_{n+2}, ..., t_{n+K}]
+  D --> V[Target model: ONE forward pass over all K candidates in parallel]
+  V --> Acc{All accepted?}
+  Acc -->|Yes — emit all K| Out[Output]
+  Acc -->|First rejection at j — emit accepted prefix + correction| Out
+  Out --> T
+```
+
+Draft = cheap. Verify = one big-model forward over a sequence of $K$ tokens — costs roughly the same as one forward over 1 token because attention over $K$ is small relative to the FFN work that dominates.
+
+## Concrete walkthrough
+
+### The math (rejection sampling)
+
+Let $p$ be the target distribution at step $i$ and $q$ be the draft's distribution. The draft samples $\tilde t_i \sim q$. We accept it with probability $\min(1, p(\tilde t_i) / q(\tilde t_i))$. If rejected, we resample from the residual distribution $\max(0, p - q)$ normalized.
+
+**Crucial property:** the resulting samples are *exactly* drawn from $p$. The output distribution is identical to running the target alone. **No quality change.**
+
+In practice many implementations use **greedy** (argmax) verification — accept iff target's argmax matches the draft's token. Slightly biased away from sampling but simpler and faster.
+
+### The cost model
+
+Per "speculation round" of $K$ tokens:
+
+- 1 draft forward producing $K$ tokens: cost $\approx K \cdot c_{\text{draft}}$
+- 1 target forward over $K$ tokens: cost $\approx c_{\text{target}}$ (parallel, big-model FFN dominates)
+- Expected accepted prefix length: $\bar L = \sum_{i=1}^{K} \prod_{j \le i} \alpha$ where $\alpha$ is the acceptance probability (≈ same number of expected acceptances per step)
+
+Speedup vs naive ≈ $\bar L \cdot c_{\text{target}} / (c_{\text{target}} + K \cdot c_{\text{draft}})$.
+
+For a 70B target with a 1B draft and $\alpha \approx 0.7$, $K = 5$:
+- $\bar L \approx 3.0$ tokens
+- speedup $\approx 3.0 \cdot c_{70B} / (c_{70B} + 5 \cdot c_{1B}) \approx 2.5×$
+
+### The four families
+
+**1. Vanilla speculative decoding** (Leviathan et al., Chen et al., 2023)
+
+Pair a small draft model (e.g., 1B) with a big target (e.g., 70B). Both must share the same tokenizer. ~70% acceptance rate; 2× speedup.
+
+**2. Medusa** (Cai et al., 2024)
+
+Add several small "Medusa heads" on top of the target's last hidden state. Each head predicts a token at offset $+1, +2, \ldots, +K$ from current position **in parallel**. No separate draft model needed.
+
+```text
+Last hidden state h_t → Medusa head 1 → t_{t+1}
+                       → Medusa head 2 → t_{t+2}
+                       → Medusa head 3 → t_{t+3}
+                       ...
+```
+
+Verification: run target on the predicted tree, accept the longest matching path. Simpler than draft models; needs ~1B-token fine-tune for the heads. ~2× speedup, lower than full draft-model methods.
+
+**3. EAGLE-3** (Li et al., 2024 → 2025)
+
+Auto-regressive draft head attached to the target. Each draft step takes the target's previous hidden state + the previous predicted token, predicts the next. **Sequential** within a draft round, but very cheap because it shares the target's hidden representations.
+
+EAGLE-3 (2024 update with multi-step training) hits **~80% acceptance** and **3× speedup** on chat / instruction workloads. Currently the frontier as of April 2026.
+
+**4. Prompt Lookup Decoding (PLD)** / lookahead decoding
+
+No draft model at all. Speculate from **n-gram matches in the prompt or recent output**. If the model just generated "the FastAPI app" and the prompt contains "the FastAPI app routes requests…", speculate "routes requests…" from the prompt.
+
+Free at inference time, works best on summarization / RAG / code-completion where output strongly correlates with input. ~1.5–2× speedup on the right workloads, ~1× on creative tasks.
+
+## Real numbers — vLLM 0.7 + Llama-3.1-70B + Llama-3.2-1B draft
+
+| Method | tok/s | Speedup | Acceptance |
+| --- | --- | --- | --- |
+| Baseline (no spec) | 38 | 1.0× | — |
+| Vanilla spec, $K=4$ | 78 | 2.05× | 71% |
+| Medusa-2 | 72 | 1.89× | — |
+| **EAGLE-3** | **108** | **2.84×** | **78%** |
+| PLD (RAG workload) | 60 | 1.58× | n-gram dep. |
+
+EAGLE-3 is the winner on chat workloads through 2025–2026 by a clear margin.
+
+## Run it in your browser — the math, visualized
+
+<RunInBrowser
+  description="Compute expected speedup for spec decoding under various draft acceptance rates."
+  code={`def speedup(K, alpha, c_draft_over_target=0.05):
+    """
+    K = max speculative depth
+    alpha = per-token draft acceptance rate
+    c_draft_over_target = compute cost of one draft step relative to one target step
+    """
+    # Expected accepted prefix length: 1 + α + α^2 + ... + α^K
+    expected_accepted = sum(alpha ** i for i in range(1, K + 1))
+    # Total cost per round: target forward + K draft forwards
+    cost_round = 1 + K * c_draft_over_target
+    return (1 + expected_accepted) / cost_round
+
+print("Speedup as a function of draft acceptance rate α (K = 5, draft = 5% of target cost):")
+for alpha in (0.3, 0.5, 0.6, 0.7, 0.8, 0.9):
+    s = speedup(K=5, alpha=alpha)
+    print(f"  α = {alpha:.1f}  ->  {s:.2f}x")
+
+print("\\nSpeedup as a function of K (α = 0.7):")
+for K in (1, 2, 3, 4, 5, 7, 10):
+    s = speedup(K=K, alpha=0.7)
+    print(f"  K = {K:>2}  ->  {s:.2f}x")
+`}
+/>
+
+You'll see speedup peaks around $K = 4$ – $6$ for common acceptance rates. Past that, additional draft tokens are unlikely to be accepted and the draft cost catches up.
+
+## Quick check
+
+<Quiz
+  question="You're serving a 70B model and the workload is heavy chat with creative open-ended responses. EAGLE-3 gives a 2.5× decode speedup, PLD gives 1.05×. Why is PLD so much worse on this workload?"
+  options={[
+    'PLD requires a custom kernel that\'s not enabled.',
+    'Open-ended creative output rarely contains n-grams from the prompt, so PLD\'s prompt-based speculation almost always fails.',
+    'PLD only works on quantized models.',
+    'EAGLE-3 is fundamentally faster regardless of workload.',
+  ]}
+  answer={1}
+  explanation="PLD speculates by looking up n-grams in the prompt. On RAG / summarization / code completion, the output reuses prompt language, so PLD wins for free. On creative chat, the model invents new wording — n-gram lookups don't match — and PLD's speculation always fails, falling back to baseline decode. EAGLE-3 has a learned draft so it doesn't depend on prompt-output overlap."
+/>
+
+## Key takeaways
+
+1. **Speculative decoding is a free lunch.** Same model, same quality, 2–3× decode throughput. Standard in 2026.
+2. **EAGLE-3 is the current frontier** for chat/instruction workloads — ~3× speedup, ~80% acceptance.
+3. **Medusa** is simpler but lower-ceiling — good for a quick win on a single model.
+4. **PLD is workload-specific** — RAG / summarization / code wins for free, creative tasks gain ~nothing.
+5. **The math is simple, the kernels are not.** Verify-K-tokens-in-one-forward needs custom attention kernels; this is why the technique was theoretical for years before vLLM/SGLang/TRT-LLM made it production-ready.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'paper', href: 'https://arxiv.org/abs/2211.17192', title: 'Fast Inference from Transformers via Speculative Decoding', author: 'Leviathan, Kalman, Matias (Google, 2023)', note: 'One of the two original papers (the other is Chen et al., 2023). Foundational.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2401.10774', title: 'Medusa: Simple LLM Inference Acceleration Framework', author: 'Cai et al. (2024)', note: 'The Medusa paper. Multi-head parallel speculation.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2503.01840', title: 'EAGLE-3: Scaling up Inference Acceleration of Large Language Models', author: 'Li et al. (early 2025)', note: 'Frontier through 2026. Auto-regressive draft heads with deep training.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2401.09508', title: 'Prompt Lookup Decoding', author: 'Saxena (2024)', note: 'PLD. No draft model needed. Short paper.' },
+    { kind: 'docs', href: 'https://docs.vllm.ai/en/latest/features/spec_decode.html', title: 'vLLM — speculative decoding docs', note: 'How to enable in vLLM.' },
+    { kind: 'blog', href: 'https://blog.fireworks.ai/multi-token-prediction-and-medusa-2-29c93cf1c2bd', title: 'Fireworks AI — Multi-Token Prediction', note: 'Production lessons from running speculative decoding at scale.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=hm7VEgxhOvk', title: 'Yam Peleg — Speculative Decoding Explained', note: 'Best 25-min visual walkthrough.' },
+    { kind: 'repo', href: 'https://github.com/SafeAILab/EAGLE', title: 'SafeAILab/EAGLE', note: 'EAGLE-3 reference implementation.' },
+  ]}
+/>
+
+<LessonComplete />

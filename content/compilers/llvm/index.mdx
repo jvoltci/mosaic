@@ -1,0 +1,20 @@
+---
+title: LLVM
+description: The universal compiler infrastructure that almost every modern systems toolchain ultimately lowers to.
+---
+
+# LLVM
+
+If you understand LLVM, you can read the bottom of every modern compiler: Clang, Rustc, Swift, MLIR, even ML compilers like TVM and XLA all eventually emit LLVM IR. The IR itself is small and learnable — and it's the universal language of "what the compiler thinks your program is doing".
+
+> Lessons coming: LLVM IR Tour · Passes & Optimization Pipelines · Code Generation
+
+<Capstone
+  title="Write your first LLVM passes — count loops, hoist invariants"
+  pitch="The compiler stops being a black box the day you watch it transform your IR with a pass you wrote."
+  what="Write two LLVM passes against the new pass manager: (1) an analysis pass that counts loops and prints function statistics; (2) a transformation pass that hoists loop-invariant load instructions. Run both on a small C program. Inspect IR before and after with `opt -print-after-all`."
+  sota={['LLVM 18+', 'opt', 'Clang', 'New Pass Manager API', 'lit + FileCheck for testing']}
+  device="laptop"
+  time="One weekend"
+  level="advanced"
+/>

@@ -1,0 +1,27 @@
+---
+title: Systems Foundations
+description: The substrate everything else runs on — memory model, CPU caches, SIMD, threading.
+---
+
+import { TrackBanner } from '../../components/TrackBanner'
+
+<TrackBanner
+  track="foundations"
+  icon="01"
+  eyebrow="Track 01 · Systems Foundations"
+  title="The substrate everything else runs on."
+  subtitle="Before you can reason about ML compilers or GPU kernels, you need to understand what the CPU is actually doing on every clock cycle. This track unlearns the abstractions that high-level languages provide and rebuilds your mental model around hardware reality."
+/>
+
+## Modules in this track
+
+- **[C++ Memory Model](/foundations/cpp-memory)** — stack vs heap, RAII, move semantics, smart pointers
+- **[Caches & Hardware Reality](/foundations/caches-and-architecture)** — cache lines, branch prediction, data-oriented design
+- **[Parallelism & SIMD](/foundations/parallelism)** — threads, lock-free programming, vector intrinsics
+
+## What you'll be able to do after
+
+- Read C++ code and predict where it allocates, where it copies, and where it stalls
+- Recognize and fix cache-unfriendly memory access patterns
+- Reason about why a "trivial" change to a loop can be 10× faster
+- Have the vocabulary to read a CPU profiler output without getting lost

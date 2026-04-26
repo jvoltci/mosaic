@@ -1,0 +1,27 @@
+{
+  "name": "mosaic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A free, self-paced course on AI Systems, ML Compilers, and AI Architectures.",
+  "scripts": {
+    "predev": "node scripts/build-cheatsheet.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/build-cheatsheet.mjs",
+    "build": "next build",
+    "start": "next start",
+    "build-cheatsheet": "node scripts/build-cheatsheet.mjs"
+  },
+  "dependencies": {
+    "next": "^15.1.0",
+    "nextra": "^4.0.0",
+    "nextra-theme-docs": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,27 @@
+---
+title: Serve & Ship
+description: vLLM, on-device inference, cost optimization, observability — turn a model into a product.
+---
+
+# Serve & Ship
+
+A model file isn't a product. This module covers the full last mile: which inference server to pick, how to run a 4-bit model on your phone, the 4 levers that get you 5–10× cheaper inference, and the observability stack that tells you what users are actually doing.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/applied/serve/on-device', title: 'On-Device Inference', estMin: 15 },
+    { slug: '/applied/serve/vllm-sglang', title: 'vLLM & SGLang', estMin: 14 },
+  ]}
+/>
+
+> More lessons coming: Cost & Latency · Observability
+
+<Capstone
+  title="A real chat app — running fully on your phone, offline"
+  pitch="A native iOS or Android app with a 4-bit LLM inside, generating tokens at airplane-mode-speed. No cloud."
+  what="Build a SwiftUI (iOS) or Kotlin Compose (Android) chat UI. Embed llama.cpp's C++ runtime. Ship a Q4_K_M Llama-3.2-3B GGUF inside the app bundle. Wire prompt → tokens with proper streaming. Test on real device with airplane mode on. Measure tokens/sec under sustained load + thermal throttling."
+  sota={['llama.cpp (Metal/Vulkan/NEON)', 'GGUF Q4_K_M', 'SwiftUI / Kotlin Compose', 'Llama-3.2-3B-Instruct', 'streaming token decode']}
+  device="phone"
+  time="One weekend"
+  level="advanced"
+/>
