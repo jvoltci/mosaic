@@ -1812,109 +1812,54 @@ body {
 /* ============================================================
    Support section (Buy Me a Coffee + UPI + GitHub Sponsors)
    ============================================================ */
-.m-support {
+/* ============================================================
+   Subtle global footer — visitor count + tip-jar links, one line
+   ============================================================ */
+.m-footer {
   border-top: 1px solid var(--m-border);
-  padding: 5rem 1.5rem;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(242, 204, 143, 0.10) 0%, transparent 60%),
-    var(--m-bg);
-  text-align: center;
+  padding: 1.1rem 1.5rem;
+  background: var(--m-bg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 0.82rem;
+  color: var(--m-fg-dim);
 }
-.m-support-inner {
-  max-width: 38rem;
+.m-footer-inner {
+  max-width: 64rem;
   margin: 0 auto;
-}
-.m-support-eyebrow {
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 0.78rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--m-fg-dim);
-  margin: 0 0 0.6rem;
-}
-.m-support-title {
-  font-family: var(--font-display), Georgia, serif;
-  font-size: clamp(1.6rem, 4vw, 2.4rem);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  margin: 0 0 1rem;
-  color: var(--m-fg);
-}
-.m-support-italic {
-  font-style: italic;
-  color: var(--m-track-architecture);
-}
-.m-support-lede {
-  font-family: var(--font-serif), Georgia, serif;
-  font-size: 1.02rem;
-  line-height: 1.65;
-  color: var(--m-fg-muted);
-  margin: 0 0 2rem;
-}
-.m-support-buttons {
   display: flex;
-  gap: 0.75rem;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-bottom: 1.5rem;
-}
-.m-support-btn {
-  display: inline-flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.85rem 1.25rem;
-  border: 1px solid var(--m-border);
-  border-radius: 0.6rem;
-  background: var(--m-bg-soft);
-  color: var(--m-fg);
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 0.95rem;
-  font-weight: 500;
-  text-decoration: none;
-  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-  min-width: 12rem;
+  justify-content: space-between;
+  gap: 1.25rem;
+  flex-wrap: wrap;
 }
-.m-support-btn:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--m-fg) 20%, transparent);
-  background: var(--m-bg-soft);
-}
-.m-support-btn-sub {
-  font-size: 0.75rem;
-  color: var(--m-fg-dim);
-  font-weight: 400;
-  letter-spacing: 0.05em;
+.m-footer-count {
+  font-style: italic;
+  letter-spacing: 0.005em;
+  color: var(--m-fg-muted);
   font-feature-settings: 'tnum';
 }
-.m-support-btn-primary {
-  background: var(--m-track-architecture);
-  color: var(--m-bg);
-  border-color: var(--m-track-architecture);
+.m-footer-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
 }
-.m-support-btn-primary:hover {
-  background: color-mix(in srgb, var(--m-track-architecture) 90%, white);
-  border-color: var(--m-track-architecture);
-  color: var(--m-bg);
+.m-footer-links a {
+  color: var(--m-fg-muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
-.m-support-btn-primary .m-support-btn-sub { color: rgba(10, 10, 15, 0.6); }
-.m-support-btn-upi {
-  border-color: rgba(74, 155, 142, 0.35);
+.m-footer-links a:hover {
+  color: var(--m-fg);
+  border-bottom-color: var(--m-fg-dim);
 }
-.m-support-btn-upi:hover { border-color: rgba(74, 155, 142, 0.6); }
-.m-support-fine {
-  font-family: var(--font-sans), system-ui, sans-serif;
-  font-size: 0.85rem;
-  color: var(--m-fg-dim);
-  margin: 0;
-}
-.m-support-fine a { color: var(--m-fg-muted); text-decoration: underline; }
+.m-footer-dot { color: var(--m-fg-dim); opacity: 0.5; }
+.m-footer-fine { color: var(--m-fg-dim); }
 
 @media (max-width: 600px) {
-  .m-support { padding: 3.5rem 1.25rem; }
-  .m-support-buttons { flex-direction: column; align-items: stretch; }
-  .m-support-btn { min-width: 0; }
+  .m-footer { padding: 0.95rem 1.1rem; font-size: 0.78rem; }
+  .m-footer-inner { gap: 0.6rem; justify-content: center; text-align: center; }
 }
 
 /* ============================================================
