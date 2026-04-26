@@ -1,8 +1,8 @@
 ---
 title: KV Cache
 description: The state machine that makes autoregressive generation tractable — and the memory manager that makes it scale.
+last_reviewed: 2026-04-26
 ---
-
 # KV Cache
 
 You can't recompute the entire prefix on every generated token; the KV cache is what lets you avoid that. But the cache also dominates LLM serving memory — which is why PagedAttention, prefix caching, and KV quantization are central topics in modern serving systems.

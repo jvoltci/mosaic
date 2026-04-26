@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { TILES, TRACK_ACCENT, TRACK_ICON, TRACK_LABELS, type Tile } from '../../lib/mosaic-tiles'
+import { TILES, TRACK_ACCENT, TRACK_NUM, TRACK_LABELS, type Tile } from '../../lib/mosaic-tiles'
 import { FocusScroll } from './FocusScroll'
 
 type Props = {
@@ -25,7 +25,7 @@ export function LessonChrome({ pathname, children }: Props) {
 
       <nav className="m-lesson-breadcrumb" aria-label="Breadcrumb">
         <Link href={`/${tile.track}`} className="m-lesson-bc-track">
-          <span aria-hidden>{TRACK_ICON[tile.track]}</span>
+          <span aria-hidden>{TRACK_NUM[tile.track]}</span>
           {TRACK_LABELS[tile.track]}
         </Link>
         <span aria-hidden className="m-lesson-bc-sep">/</span>
@@ -67,7 +67,7 @@ export function LessonChrome({ pathname, children }: Props) {
 
         <div className="m-lesson-track-strip">
           <span className="m-lesson-track-label">
-            <span aria-hidden>{TRACK_ICON[tile.track]}</span>
+            <span aria-hidden>{TRACK_NUM[tile.track]}</span>
             <Link href={`/${tile.track}`}>{TRACK_LABELS[tile.track]}</Link>
             <span className="m-lesson-track-dot">·</span>
             <Link href={`/${moduleSlug}`}>{tile.moduleName}</Link>

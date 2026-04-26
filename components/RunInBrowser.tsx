@@ -15,7 +15,9 @@ declare global {
   }
 }
 
-const PYODIDE_URL = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js'
+const PYODIDE_VERSION = 'v0.26.4'
+const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/${PYODIDE_VERSION}/full/`
+const PYODIDE_URL = `${PYODIDE_BASE}pyodide.js`
 
 type Variant = {
   /** Short label shown on the chip button. */
@@ -75,7 +77,7 @@ export function RunInBrowser({
       })
     }
     window.__mosaicPyodidePromise = window
-      .loadPyodide!({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/' })
+      .loadPyodide!({ indexURL: PYODIDE_BASE })
       .then((py) => {
         window.__mosaicPyodide = py
         return py

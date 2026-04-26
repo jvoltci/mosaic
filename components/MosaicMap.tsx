@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { TILES, TRACK_ACCENT, TRACK_ICON, TRACK_LABELS, type Tile, type TrackKey } from '../lib/mosaic-tiles'
+import { TILES, TRACK_ACCENT, TRACK_NUM, TRACK_LABELS, type Tile, type TrackKey } from '../lib/mosaic-tiles'
 import { axialToPixel, hexPath, bounds } from '../lib/hex'
 import { useProgress } from '../lib/use-progress'
 import { illustrationFor } from './tiles'
@@ -214,7 +214,7 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
               className="m-mosaic-progress-pill"
               style={{ ['--accent' as string]: TRACK_ACCENT[track] }}
             >
-              <span className="m-mosaic-progress-icon">{TRACK_ICON[track]}</span>
+              <span className="m-mosaic-progress-icon">{TRACK_NUM[track]}</span>
               <span className="m-mosaic-progress-label">{TRACK_LABELS[track]}</span>
               <span className="m-mosaic-progress-count">
                 {c.done}/{c.total}
@@ -264,7 +264,7 @@ function MosaicTooltip({
       aria-live="polite"
     >
       <div className="m-mtooltip-meta">
-        <span className="m-mtooltip-icon" aria-hidden>{TRACK_ICON[tile.track]}</span>
+        <span className="m-mtooltip-icon" aria-hidden>{TRACK_NUM[tile.track]}</span>
         <span className="m-mtooltip-track">{TRACK_LABELS[tile.track]} · {tile.moduleName}</span>
         {isCompleted && <span className="m-mtooltip-done">✓</span>}
         {!tile.available && <span className="m-mtooltip-stub">soon</span>}

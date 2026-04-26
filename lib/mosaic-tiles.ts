@@ -73,17 +73,6 @@ export const TRACK_SHORT: Record<TrackKey, string> = {
   'edge-ai': 'Edge AI',
 }
 
-/** @deprecated Kept for backwards compat — prefer TRACK_NUM. */
-export const TRACK_ICON: Record<TrackKey, string> = {
-  foundations: '01',
-  'ml-execution': '02',
-  training: '03',
-  'llm-architecture': '04',
-  compilers: '05',
-  applied: '06',
-  'edge-ai': '07',
-}
-
 export const TRACK_TAGLINE: Record<TrackKey, string> = {
   foundations: 'The substrate everything else runs on.',
   'ml-execution': 'What an ML workload actually does on the metal.',

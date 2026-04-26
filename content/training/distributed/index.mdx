@@ -1,8 +1,8 @@
 ---
 title: Distributed Training
 description: DP, TP, PP, FSDP2 — the parallelism mesh that lets you train across thousands of GPUs.
+last_reviewed: 2026-04-26
 ---
-
 # Distributed Training
 
 A frontier training run is a 4D or 5D parallelism mesh: data × tensor × pipeline × sequence × expert. This module walks through each axis, shows what they cost in communication and memory, and ends with how production frameworks (TorchTitan, Megatron-Core) compose them.

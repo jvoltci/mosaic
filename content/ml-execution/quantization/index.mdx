@@ -1,8 +1,8 @@
 ---
 title: Quantization
 description: Compressing models from FP16 to INT8 / INT4 without breaking them — and the kernels that make it fast.
+last_reviewed: 2026-04-26
 ---
-
 # Quantization
 
 Memory bandwidth, not compute, is the bottleneck for most LLM inference. Quantization is how you move less data — store weights at 4 or 8 bits, expand them only when you need to compute. The tradeoff: a small accuracy hit for a large speedup.
