@@ -259,6 +259,34 @@
     "tldr": "- A CUDA kernel launches a **grid** of **thread blocks** (CTAs). Each block runs on a single SM. Each block is a set of **threads**, organized internally into **warps** of 32.\n- Hierarchy: **grid → block → warp → thread**. Each level has its own coordinates (`blockIdx`, `threadIdx`, etc.) and its own synchronization primitives.\n- **The block-per-tile pattern** is universal in modern AI kernels: each block computes one output tile (e.g., 128×128 of a matmul). The grid is `(M/128, N/128)`. Index math turns block coordinates into tile coordinates.\n- **Synchronization is hierarchical**: `__syncthreads()` syncs a block, `__syncwarp()` syncs a warp, the CUDA driver syncs the grid. Cooperative groups generalize this on H100+ with **distributed shared memory** (DSMEM) — adjacent blocks share an SMEM cluster.\n- **Triton hides this hierarchy.** A Triton kernel sees one *program* per tile; the warp/thread layer is implicit and the compiler decides. Same mental model, less typing."
   },
   {
+    "slug": "/ml-execution/quantization/fp8-overview",
+    "track": "ml-execution",
+    "module": "ml-execution/quantization",
+    "title": "FP8 Inference",
+    "tldr": "- **FP8** is an 8-bit floating-point format (sign + exponent + mantissa). Two variants: **E4M3** (4 exponent bits, 3 mantissa, range ~ ±448, used for weights/activations) and **E5M2** (5 exponent bits, 2 mantissa, range ~ ±57344, used for gradients during training).\n- Replaced **INT8** as the standard quantization format on H100+ because: it preserves exponent flexibility (no per-tensor calibration mess), tensor cores natively support it, and accuracy is meaningfully better at the same bit-width.\n- **Hopper added FP8 tensor cores; Blackwell added FP4 / FP6 alongside.** All modern AI compilers (CUTLASS, Triton, vLLM, FlashAttention-3) support FP8 weights + activations + KV cache.\n- Quality regression from BF16 → FP8 is typically **under 0.5 points** on standard benchmarks (MMLU, GSM8K). KV-cache FP8 quantization adds ~0 measurable regression for most models.\n- **Per-tensor scaling** is the magic — the format itself has limited range, but each tensor (or each block) carries a scale factor so the actual values can span any magnitude. The scale is stored in higher precision (BF16 or FP32)."
+  },
+  {
+    "slug": "/ml-execution/quantization/int4-and-awq",
+    "track": "ml-execution",
+    "module": "ml-execution/quantization",
+    "title": "INT4 / AWQ / GPTQ",
+    "tldr": "- **INT4** stores weights as 4-bit integers. Two weights per byte, **4× compression** over BF16. The cost: more accuracy work — naive INT4 quantization regresses noticeably; modern recipes (AWQ, GPTQ) close most of the gap.\n- **GPTQ** (Frantar et al., 2022) is a *post-training* quantization recipe: iteratively quantize weights using **second-order info** (Hessian-based) to minimize per-layer reconstruction error. Offline; needs a calibration set; produces ~0.5–2 pt regression on MMLU.\n- **AWQ** (Lin et al., 2024) is **activation-aware**: it identifies \"salient\" weights (those that hugely affect activations) and protects them by per-channel scaling. Often outperforms GPTQ at the same bit-width; faster to apply.\n- **INT4 is the format for: 4-bit on-device inference (llama.cpp Q4_K_M, GGUF), low-cost serving with very large models on a single GPU, edge AI.** Not used for training — INT4 gradients are too lossy.\n- **The kernel matters as much as the format.** INT4 weights need fast unpack-and-multiply kernels (Marlin, exllama, AWQ-CUTLASS); without them, the \"4× smaller\" doesn't translate to \"much faster.\""
+  },
+  {
+    "slug": "/ml-execution/quantization/mxfp4-nvfp4",
+    "track": "ml-execution",
+    "module": "ml-execution/quantization",
+    "title": "MXFP4 / NVFP4",
+    "tldr": "- **MXFP4** (Microscaling FP4) is an OCP-standardized 4-bit floating-point format with **per-block scale factors**. Each 32-element block has its own E8M0 (8-bit exponent) scale; the elements themselves are 4-bit floats (E2M1: 1 sign, 2 exp, 1 mantissa).\n- **NVFP4** is NVIDIA's variant — same idea, slightly different scale factor (E4M3 instead of E8M0), block size 16 instead of 32. Higher accuracy at slightly higher metadata cost.\n- **Blackwell tensor cores natively support these formats.** MXFP4/NVFP4 weights × FP16 activations → FP16 accumulator at full tensor-core throughput. No software unpack-and-dequantize.\n- **Quality vs INT4 AWQ/GPTQ:** comparable on most benchmarks; better on long-tail outliers because the *floating-point* representation handles wide dynamic range that INT4 has to scale for.\n- **Why this matters for 2026–2027:** if Blackwell tensor cores are 2× faster on FP4 than FP8, and quality holds, FP4 becomes the default inference format. INT4 may become legacy."
+  },
+  {
+    "slug": "/ml-execution/quantization/rotation-quant",
+    "track": "ml-execution",
+    "module": "ml-execution/quantization",
+    "title": "Rotation Quantization",
+    "tldr": "- LLM activations have **outliers** — a few channels with magnitudes 10–100× larger than typical. They wreck quantization (the scale gets pulled too wide; non-outlier values lose precision).\n- **Rotation quantization** applies an orthogonal matrix `R` to the activations *and* a compensating `R⁻¹` to the next layer's weights. The math is unchanged, but the rotated activations have **no outlier channels** — their magnitudes are spread evenly.\n- Rotated activations quantize cleanly to INT4 / FP4 / FP8 *without* outlier-protection tricks like AWQ. **QuaRot** (Ashkboos et al., 2024) was the first published version; **SpinQuant** (Liu et al., 2024) learns the rotation; both deliver near-FP16 accuracy at INT4.\n- The rotation cost: one extra small matmul per attention block at runtime — typically under 2% throughput hit. The accuracy gain at low bit-widths can be 2–5 points on MMLU.\n- **Where it matters most: aggressive 4-bit and below.** For FP8, outliers usually don't break things. For 4-bit (MXFP4, INT4) and below, rotation is increasingly default — DeepSeek-V3 uses a related trick during training; production INT4 stacks like vLLM v1 ship rotation as an option."
+  },
+  {
     "slug": "/ml-execution/tensors-in-memory/contiguous-vs-non",
     "track": "ml-execution",
     "module": "ml-execution/tensors-in-memory",
