@@ -13,13 +13,13 @@ export function Hero() {
 
       <p className="m-hero-tagline">
         The systems behind modern AI — from the C++ memory model up to MLA, FlashAttention-3,
-        and on-device inference.
+        on-device inference, and a LAN of phones running 70B.
       </p>
 
       <p className="m-hero-sub">
-        Six tracks. Sixty-plus lessons. Every concept the field actually uses today, written
-        like an engineer would explain it to another engineer. Real numbers, runnable code,
-        nothing hand-wavy. Each lesson finishes in 15 minutes.
+        Seven tracks. Eighty-eight lessons. Every concept the field actually uses today,
+        written like an engineer would explain it to another engineer. Real numbers, runnable
+        code, nothing hand-wavy. Each lesson finishes in 15 minutes.
       </p>
 
       <div className="m-hero-cta-row">
@@ -32,7 +32,7 @@ export function Hero() {
       </div>
 
       <div className="m-hero-cue">
-        Six tracks &nbsp;·&nbsp; Twenty modules &nbsp;·&nbsp; Sixty-plus lessons
+        Seven tracks &nbsp;·&nbsp; Twenty-six modules &nbsp;·&nbsp; Eighty-eight lessons
       </div>
     </section>
   )

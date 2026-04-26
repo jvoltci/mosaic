@@ -12,7 +12,8 @@
     "start": "next start",
     "build-cheatsheet": "node scripts/build-cheatsheet.mjs",
     "verify-mapping": "node scripts/verify-mapping.mjs",
-    "lint-mdx": "node scripts/lint-mdx.mjs"
+    "lint-mdx": "node scripts/lint-mdx.mjs",
+    "audit-currency": "node scripts/audit-currency.mjs"
   },
   "dependencies": {
     "next": "^15.1.0",

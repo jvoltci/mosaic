@@ -41,8 +41,8 @@ GPUs from the silicon up; the compilers and DSLs that target them.
 2. [Thread Hierarchy](/ml-execution/gpu-fundamentals/thread-hierarchy)
 3. [Shared Memory](/ml-execution/gpu-fundamentals/shared-memory)
 4. [GEMM (Hopper / Blackwell)](/ml-execution/gpu-fundamentals/gemm)
-5. [Strides & Layout](/ml-execution/tensors-in-memory/strides-and-layout) *(coming)*
-6. [TMA & cp.async](/ml-execution/tensors-in-memory/tma-async-copy) *(coming)*
+5. [Strides & Layout](/ml-execution/tensors-in-memory/strides-and-layout)
+6. [TMA & cp.async](/ml-execution/tensors-in-memory/tma-async-copy)
 7. [LLVM IR Tour](/compilers/foundation/llvm-ir)
 8. [Passes & Pipelines](/compilers/foundation/passes)
 9. [MLIR Overview](/compilers/foundation/mlir-overview)
@@ -61,21 +61,41 @@ The capstone — [a Triton kernel that beats cuBLAS at small-N GEMM](/ml-executi
 ---
 ## III. Edge AI
 
-Quantization, on-device runtimes, NPUs. The part of the field that runs without the cloud.
+Quantization, on-device runtimes, NPUs, the browser, and swarm inference. The part of the field that runs without the cloud — including a LAN of phones running 70B together.
 
+**Foundations**
 1. [FP8 Inference](/ml-execution/quantization/fp8-overview)
 2. [INT4 / AWQ / GPTQ](/ml-execution/quantization/int4-and-awq)
 3. [MXFP4 / NVFP4](/ml-execution/quantization/mxfp4-nvfp4)
 4. [Rotation Quantization](/ml-execution/quantization/rotation-quant)
 5. [On-Device Inference](/applied/serve/on-device)
+
+**On-Device runtimes (the four production paths)**
+
 6. [llama.cpp Internals](/edge-ai/on-device/llama-cpp-internals)
 7. [ExecuTorch](/edge-ai/on-device/executorch)
-8. [Core ML & Apple Neural Engine](/edge-ai/on-device/coreml)
-9. [Qualcomm Hexagon](/edge-ai/npu/hexagon)
-10. [GGUF & i-matrix](/edge-ai/edge-quant/gguf-and-imatrix)
-11. [Distillation for Edge](/edge-ai/distillation/small-llms)
+8. [Core ML & ANE (intro)](/edge-ai/on-device/coreml)
+9. [TFLite & LiteRT](/edge-ai/on-device/tflite)
+10. [WebGPU & WebLLM](/edge-ai/browser/webgpu-webllm)
 
-The capstone — three runtimes side-by-side on iOS — lives on the [On-Device Runtimes](/edge-ai/on-device) module page. A simpler "ship llama.cpp on a phone" version sits on [On-Device Inference](/applied/serve/on-device).
+**NPU programming**
+
+11. [Qualcomm Hexagon](/edge-ai/npu/hexagon)
+12. [Apple Neural Engine — deep dive](/edge-ai/npu/apple-ane)
+
+**Edge formats + small-model recipes**
+
+13. [GGUF & i-matrix](/edge-ai/edge-quant/gguf-and-imatrix)
+14. [Distillation for Edge](/edge-ai/distillation/small-llms)
+15. [Speculative Decoding](/edge-ai/distillation/speculative-decoding)
+
+**Multimodal + distributed at the edge**
+
+16. [Whisper.cpp & on-device speech](/edge-ai/multimodal/whisper-cpp)
+17. [Mobile VLMs](/edge-ai/multimodal/mobile-vlm)
+18. [EXO & Swarm Inference](/edge-ai/distributed/exo-swarm)
+
+The capstone arc here is one of the strongest in Mosaic: three runtimes side-by-side on iOS ([On-Device Runtimes](/edge-ai/on-device)), a fully-offline voice assistant ([Multimodal Edge](/edge-ai/multimodal)), and a 4-device LAN running 70B ([Distributed Edge](/edge-ai/distributed)) — three end-to-end Edge AI artifacts that compose.
 
 ---
 ## A few notes on how to use this

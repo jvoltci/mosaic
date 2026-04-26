@@ -37,7 +37,7 @@ const TRACKS: Track[] = [
     icon: '📈',
     name: 'Training & Fine-tuning',
     desc:
-      'Gradient accumulation, mixed-precision training, LoRA, FSDP, DeepSpeed — making training fast and memory-efficient.',
+      'Gradient accumulation, mixed-precision, FSDP2, LoRA, DPO, GRPO — making training fast and memory-efficient.',
     modules: 3,
     accent: 'var(--m-track-training)',
   },
@@ -47,7 +47,7 @@ const TRACKS: Track[] = [
     icon: '🧠',
     name: 'LLM Architecture',
     desc:
-      'Transformers from a systems lens. KV cache, GQA, RoPE, FlashAttention, sampling, continuous batching.',
+      'Transformers from a systems lens. KV cache, GQA/MLA, RoPE, FlashAttention-3, sampling, continuous batching.',
     modules: 3,
     accent: 'var(--m-track-architecture)',
   },
@@ -57,8 +57,8 @@ const TRACKS: Track[] = [
     icon: '⚙️',
     name: 'ML Compilers & Hardware',
     desc:
-      'LLVM, MLIR, TVM, XLA, ExecuTorch, Triton, Vulkan, Metal Performance Shaders — the stack that turns models into binaries.',
-    modules: 4,
+      'LLVM, MLIR, TVM, Triton, CUTe / CUTLASS, ThunderKittens — the stack that turns models into binaries.',
+    modules: 3,
     accent: 'var(--m-track-compilers)',
   },
   {
@@ -67,9 +67,19 @@ const TRACKS: Track[] = [
     icon: '🚀',
     name: 'Applied ML Systems',
     desc:
-      'End-to-end deployment: model serving, edge inference, on-device ML, and building production AI systems.',
-    modules: 3,
+      'LLM basics, structured output, tool use, RAG, ReAct agents, MCP, vLLM serving, observability — production AI.',
+    modules: 4,
     accent: 'var(--m-track-applied)',
+  },
+  {
+    num: '07',
+    href: '/edge-ai',
+    icon: '📱',
+    name: 'Edge AI',
+    desc:
+      'llama.cpp, ExecuTorch, Core ML, TFLite, WebGPU, Whisper.cpp, mobile VLMs, swarm inference. AI off the cloud.',
+    modules: 7,
+    accent: 'var(--m-track-edge-ai)',
   },
 ]
 
@@ -77,7 +87,7 @@ export function TrackGrid() {
   return (
     <section className="m-tracks-section">
       <div className="m-tracks-inner">
-        <p className="m-section-eyebrow">The six tracks</p>
+        <p className="m-section-eyebrow">The seven tracks</p>
         <h2 className="m-section-title">Build the stack from the silicon up.</h2>
         <p className="m-section-lede">
           Each track is a self-contained sequence of small modules. Lessons take ~10–15 minutes — short enough that
