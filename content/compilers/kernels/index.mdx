@@ -1,10 +1,76 @@
 ---
 title: Kernels & Hardware
-description: Triton, CUTLASS, ThunderKittens, and the 2026 hardware landscape.
+description: Triton, CUTLASS, ThunderKittens — when the compiler isn't enough and you write the kernel yourself.
 ---
 
 # Kernels & Hardware
 
-When the compiler isn't enough, you write the kernel. This module covers the kernel DSLs that win in practice — Triton, CUTLASS / CuTe, ThunderKittens — and the hardware landscape they target.
+When the compiler isn't enough, you write the kernel. This module covers the kernel DSLs that win in practice — Triton (the daily driver), CUTLASS / CuTe (the NVIDIA reference), ThunderKittens / TileLang (the post-Triton frontier) — and a coming lesson on the 2026 hardware landscape that frames *which* DSL fits *which* chip.
 
-> Lessons coming: Triton · CuTe & CUTLASS 4 · ThunderKittens & TileLang · Hardware Landscape 2026
+<ModuleProgress
+  lessons={[
+    { slug: '/compilers/kernels/triton', title: 'Triton', estMin: 16 },
+    { slug: '/compilers/kernels/cute-cutlass', title: 'CuTe & CUTLASS 4', estMin: 18 },
+    { slug: '/compilers/kernels/thunderkittens', title: 'ThunderKittens & TileLang', estMin: 14 },
+  ]}
+/>
+
+> Lesson coming: Hardware Landscape 2026 — Blackwell · MI355X · TPU v6 · Cerebras · Groq
+
+<Capstone
+  title="Three matmuls, three DSLs — same kernel, three implementations"
+  pitch="The fastest way to feel each DSL's voice is to write the same kernel in all three. Triton, CUTLASS, ThunderKittens (or TileLang)."
+  what="One repo with three implementations of a 16-bit GEMM (M=N=2048, K=4096): a Triton autotune kernel, a CUTLASS-builder GEMM, and a ThunderKittens or TileLang kernel. The artifact is the three sources side by side, a benchmark plot showing all three vs cuBLAS, and a one-page README discussing the lines-of-code-vs-perf tradeoff each picked."
+  sota={['Triton 3.x (autotune)', 'CUTLASS 4 (Hopper builder)', 'ThunderKittens or TileLang', 'cuBLAS as reference', 'ncu for the kernel-level profile', 'matplotlib for the plot']}
+  device="colab"
+  time="One focused weekend (~12 h)"
+  level="frontier"
+  steps={[
+    {
+      title: 'Set up a benchmarking harness',
+      goal: 'A `bench.py` that takes a kernel function and runs it on M=N=2048, K=4096 FP16 inputs 50 times after a warmup. Reports TFLOPs/s. Compares against `torch.matmul` (cuBLAS).',
+      checkpoint: 'You can plug in any kernel function and get a TFLOPs/s number.',
+      trap: 'Forgetting `torch.cuda.synchronize()` before stopping the timer measures launch latency, not kernel time.',
+      est: '45 min',
+    },
+    {
+      title: 'Implementation 1 — Triton with autotune',
+      goal: 'Write the matmul kernel from this lesson, with 6–8 autotune configs spanning (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages). Verify correctness vs torch.matmul, run bench.',
+      checkpoint: 'Triton kernel hits 75–90% of cuBLAS at M=N=2048. Lines of code: ~50.',
+      trap: 'Forgetting to mask the load when M, N, or K aren\'t multiples of the block size. Random nonsense values poison your accumulator silently.',
+      est: '90 min',
+    },
+    {
+      title: 'Implementation 2 — CUTLASS using CollectiveBuilder',
+      goal: 'Use the Hopper CollectiveBuilder pattern from the CuTe lesson. Pick `KernelTmaWarpSpecializedPingpong` schedule, a 128×128×64 tile, 2-CTA cluster. Compile (slow). Bench.',
+      checkpoint: 'CUTLASS kernel hits 85–95% of cuBLAS. Lines of code: ~150 (most of which is template parameters).',
+      trap: 'Wrong precision combination → opaque template-instantiation error. Pin the exact (ElementA, LayoutA, ElementB, LayoutB, ElementAcc, ElementOutput) tuple from a known-working CUTLASS example.',
+      est: '180 min',
+    },
+    {
+      title: 'Implementation 3 — ThunderKittens (or TileLang)',
+      goal: 'Pick whichever DSL\'s build environment you can stand up faster. Implement the same 64×64 register-tile GEMM with TMA loads and a two-stage pipeline. Bench.',
+      checkpoint: 'TK/TileLang kernel within 5% of CUTLASS, in ~30–60 lines of source.',
+      trap: 'TK template errors are walls. When stuck, copy from one of the `kernels/matmul/` examples in the TK repo verbatim, then modify.',
+      est: '120 min',
+    },
+    {
+      title: 'Profile all three with ncu',
+      goal: 'Capture a profile of each kernel at the same shape: `ncu --set full --kernel-name <kernel_name> python bench.py`. Look at tensor-core utilization, SMEM bank conflicts, occupancy. Note the differences.',
+      checkpoint: 'You have a 3-row table comparing tensor-core %, SMEM conflicts, and TFLOPs/s for the three.',
+      est: '60 min',
+    },
+    {
+      title: 'README + plot',
+      goal: 'Repo with `triton_gemm.py`, `cutlass_gemm.cu`, `tk_gemm.cu` (or `tilelang_gemm.py`), `bench.py`, `README.md` that summarizes the LOC, peak TFLOPs/s, time-to-write, and which one you\'d reach for next time.',
+      checkpoint: 'A reader who clones can install dependencies, run `python bench.py`, and reproduce your plot.',
+      est: '60 min',
+    },
+  ]}
+  outcomes={[
+    'Working implementations of the same kernel in three different DSLs — the canonical career portfolio piece for a kernel engineer',
+    'A felt sense of which DSL costs what (lines of code, time, the last 5% of perf)',
+    'Fluency reading ncu output across kernel styles — what a Triton kernel\'s profile looks like vs CUTLASS vs TK',
+    'A repo whose three sources let any future-you (or hire) immediately see how each DSL expresses the same idea',
+  ]}
+/>

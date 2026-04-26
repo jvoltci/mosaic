@@ -84,6 +84,27 @@
     "tldr": "- An LLVM **pass** is a function that reads or rewrites IR. Two flavors: **analysis** passes (compute information about the IR, like dominator trees or alias info) and **transformation** passes (rewrite IR, like inlining or dead-code elimination).\n- Passes compose into a **pipeline**. `-O0` is empty; `-O2` is ~150 passes; `-O3` adds aggressive vectorization. Each pass assumes the previous ones ran.\n- LLVM 14+ uses the **New Pass Manager** (NPM). Old `legacy::PassManager` is deprecated; new code uses `PassBuilder` + `ModulePassManager`. The migration matters because tutorials older than 2022 are usually wrong.\n- **Analysis passes are cached and invalidated**: if a transformation changes the IR, dependent analyses get re-run lazily. This is what makes pipelines fast.\n- The single most useful flag for understanding a pipeline: `opt --print-after-all` — dumps IR after every pass. Scary the first time; indispensable forever after."
   },
   {
+    "slug": "/compilers/kernels/cute-cutlass",
+    "track": "compilers",
+    "module": "compilers/kernels",
+    "title": "CuTe & CUTLASS 4",
+    "tldr": "- **CUTLASS** = NVIDIA's open-source C++ template library for GEMM-class kernels. The reference for *how to write a fast tensor-core kernel*. Every cuBLAS kernel from Hopper onward shares its design language with CUTLASS.\n- **CuTe** = the layout sublanguage inside CUTLASS 3.x+. A small, expressive type system for *tile shapes* and *layouts* — the maps between logical tile coordinates and physical memory.\n- The mental shift: **everything is a layout.** A SMEM tile, a register fragment, a TMA descriptor, a swizzle pattern — all are CuTe `Layout` values composed by `tile`, `partition`, `coalesce`, etc.\n- **CUTLASS 4** (2024–2025) is the Hopper/Blackwell native version. Adds first-class TMA, WGMMA, warp specialization, persistent kernels, FP8/FP4. Older CUTLASS 2.x is now legacy.\n- Hand-written CUTLASS still beats Triton by 5–10% on edge shapes and is the only way to access certain NVIDIA-specific instructions immediately at launch. The cost is real C++ template depth."
+  },
+  {
+    "slug": "/compilers/kernels/thunderkittens",
+    "track": "compilers",
+    "module": "compilers/kernels",
+    "title": "ThunderKittens & TileLang",
+    "tldr": "- **ThunderKittens (TK)** is a Stanford (Hazy Research) C++ embedded DSL for tile-shaped GPU kernels. The thesis: a 16×16 tile of `bf16` is the **only** primitive your kernel really needs. Build everything from that.\n- **TileLang** (Microsoft Research) is the Python-syntax cousin: a tile-first kernel language designed for AI workloads, with first-class TMA / WGMMA / warp specialization.\n- Both pitch the same idea: Triton is great but its tile algebra is partial — TK and TileLang make tiles explicit primitives with full hardware acceleration baked in. Result: kernels that are *shorter* than Triton and *faster*.\n- ThunderKittens shipped the fastest-known FlashAttention-2 forward (April 2024) in **~80 lines** of C++. The maintained version supports H100, B200, and AMD MI300X.\n- These DSLs are 2024–2026 frontier work. They're production-used in HazyResearch's stack, in some labs' kernel teams, and in OSS work like FlexAttention. **Worth knowing because it's where things are going**, not because they replaced Triton in 2026."
+  },
+  {
+    "slug": "/compilers/kernels/triton",
+    "track": "compilers",
+    "module": "compilers/kernels",
+    "title": "Triton",
+    "tldr": "- **Triton** is a Python-syntax kernel DSL that compiles via MLIR (TritonGPU dialect → llvm) to PTX. You write what looks like NumPy on tiles; the compiler emits register-tiled, SMEM-staged, tensor-core-using kernels.\n- The mental shift: **you program the block, not the thread.** A Triton \"program\" is one CTA's worth of work. Inside it you operate on whole tiles (vectors, matrices); the compiler picks the threads-per-warp distribution.\n- **`@triton.autotune`** picks the best (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages) per-shape on first run. This is the feature that makes Triton competitive with hand-tuned CUTLASS without the maintenance.\n- Triton is the *daily-driver* kernel language of OpenAI, the Triton-using parts of PyTorch (`torch.compile` lowers to it), and most performance-critical OSS work in 2025–2026. Hand-written CUTLASS still wins by 5–10% on edge cases.\n- The 2024 frontier: Triton 3.x adds Hopper TMA and warp specialization. Triton on Blackwell (5th-gen tensor cores, FP4) lands incrementally through 2025–2026."
+  },
+  {
     "slug": "/compilers/production/torch-compile",
     "track": "compilers",
     "module": "compilers/production",
