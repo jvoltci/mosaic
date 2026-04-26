@@ -7,14 +7,69 @@ description: Strides, layout, and why "the same tensor" can have wildly differen
 
 A tensor isn't just shape and dtype — it's a layout. Two tensors with the same shape can perform very differently depending on how their data is arranged in memory.
 
-> Lessons coming: Strides & Layout · Contiguous vs Non-Contiguous · Build a Tensor Library · TMA & cp.async (Hopper)
+<ModuleProgress
+  lessons={[
+    { slug: '/ml-execution/tensors-in-memory/strides-and-layout', title: 'Strides & Layout', estMin: 14 },
+    { slug: '/ml-execution/tensors-in-memory/contiguous-vs-non', title: 'Contiguous vs Non-Contiguous', estMin: 12 },
+    { slug: '/ml-execution/tensors-in-memory/tensor-library', title: 'Build a Tensor Library', estMin: 18 },
+    { slug: '/ml-execution/tensors-in-memory/tma-async-copy', title: 'TMA & cp.async', estMin: 16 },
+  ]}
+/>
 
 <Capstone
   title="A 200-line tinygrad clone"
-  pitch="A working tensor library — strides, broadcasting, and 5 ops — that runs a real MLP. Less than 200 lines."
-  what="Build a minimal Tensor class with shape + strides + dtype. Implement add, matmul, relu, softmax, transpose. Get the strides right so transpose is O(1). Run an MNIST classifier through it. Compare numerics to PyTorch."
-  sota={['Python (or C++)', 'NumPy reference', 'tinygrad source as reference', 'micrograd as inspiration']}
+  pitch="A working tensor library — strides, broadcasting, autograd, 5 ops — that runs a real MLP."
+  what="A from-scratch Python tensor library with: a Buffer/Tensor split, strides + offset views (so transpose is O(1)), 5 ops (add, matmul, relu, softmax, cross-entropy), and an autograd engine. Trains a 2-layer MLP on MNIST to >95% test accuracy. Single file, <250 LOC."
+  sota={['Python', 'NumPy as backing buffer', 'micrograd / tinygrad as references', 'MNIST loaded via sklearn or hand-loaded']}
   device="laptop"
-  time="One weekend"
+  time="One focused weekend (~10 h)"
   level="foundational"
+  steps={[
+    {
+      title: 'The Buffer class — flat storage',
+      goal: 'A 1D `Buffer` wrapping a numpy float32 array. Methods: `__len__`, `__getitem__`, `__setitem__`. That\'s it.',
+      checkpoint: 'You can `Buffer([1, 2, 3])`, read elements, mutate them.',
+      est: '15 min',
+    },
+    {
+      title: 'The Tensor class — shape + strides + offset',
+      goal: 'A `Tensor` with `(buf, shape, strides, offset, requires_grad)`. Methods: `numel`, `__getitem__`, `transpose`, `reshape`, `is_contiguous`. Strides default to row-major if not given.',
+      checkpoint: 'Round-trip: 2D tensor ↔ transpose ↔ transpose again. Element-access works through strided offsets.',
+      trap: 'Forgetting offset means slices broken. `t[2:5]` should change offset, not buffer.',
+      est: '90 min',
+    },
+    {
+      title: 'Five ops with forward + backward',
+      goal: 'Implement `Add`, `Mul`, `MatMul`, `ReLU`, `CrossEntropy` as classes with `forward()` and `backward(grad)`. Each `apply()` returns a new Tensor with `_ctx` linking back to the op.',
+      checkpoint: 'Manual gradient checks: define `f(x) = (Wx + b)^2`, compute `df/dW` analytically vs your autograd, RMSE < 1e-5.',
+      trap: 'In MatMul, the gradient w.r.t. left input is `grad @ B.T`, w.r.t. right is `A.T @ grad`. Easy to swap; the gradient check catches it.',
+      est: '180 min',
+    },
+    {
+      title: 'The autograd engine',
+      goal: '`backward(loss)` does a topo sort of the op graph ending at loss, walks reverse, accumulates `.grad` into each requires_grad input. Reset gradients with `tensor.grad = None` between steps.',
+      checkpoint: 'Loss decreases on a simple linear-regression toy. The gradient-check test from step 3 still passes.',
+      trap: 'Accumulate gradients (don\'t replace) when a tensor is used multiple times in the forward pass — otherwise multi-use parameters get the wrong gradient.',
+      est: '90 min',
+    },
+    {
+      title: 'Train MNIST',
+      goal: 'Two-layer MLP (784 → 128 → 10), SGD, batch size 64, 5 epochs. Hit >95% test accuracy.',
+      checkpoint: 'Test accuracy on MNIST > 95%. Training loop is <40 lines.',
+      trap: 'Initialize weights small (~0.02); too-large init explodes gradients in the first batch.',
+      est: '90 min',
+    },
+    {
+      title: 'README + push',
+      goal: 'Single-file repo: `tinygrad_lite.py` with the Tensor + ops + train loop, plus a one-page README explaining how each abstraction (Buffer, Tensor, Op, Engine) maps to a real framework concept.',
+      checkpoint: 'A reader can clone, `pip install numpy scikit-learn`, run `python tinygrad_lite.py` and see MNIST training.',
+      est: '45 min',
+    },
+  ]}
+  outcomes={[
+    'A working tensor library you wrote — the artifact that proves you internalize how PyTorch / JAX work',
+    'Fluency reading PyTorch internals: tensor representation, autograd graph, op dispatch all map back to your code',
+    'A debugging mental model that catches stride bugs, gradient-accumulation bugs, and shape-mismatch bugs in seconds',
+    'A repo whose README maps your file to PyTorch\'s ATen — a useful artifact for any framework-engineer interview',
+  ]}
 />

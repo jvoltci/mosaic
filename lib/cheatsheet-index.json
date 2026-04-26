@@ -259,6 +259,34 @@
     "tldr": "- A CUDA kernel launches a **grid** of **thread blocks** (CTAs). Each block runs on a single SM. Each block is a set of **threads**, organized internally into **warps** of 32.\n- Hierarchy: **grid → block → warp → thread**. Each level has its own coordinates (`blockIdx`, `threadIdx`, etc.) and its own synchronization primitives.\n- **The block-per-tile pattern** is universal in modern AI kernels: each block computes one output tile (e.g., 128×128 of a matmul). The grid is `(M/128, N/128)`. Index math turns block coordinates into tile coordinates.\n- **Synchronization is hierarchical**: `__syncthreads()` syncs a block, `__syncwarp()` syncs a warp, the CUDA driver syncs the grid. Cooperative groups generalize this on H100+ with **distributed shared memory** (DSMEM) — adjacent blocks share an SMEM cluster.\n- **Triton hides this hierarchy.** A Triton kernel sees one *program* per tile; the warp/thread layer is implicit and the compiler decides. Same mental model, less typing."
   },
   {
+    "slug": "/ml-execution/tensors-in-memory/contiguous-vs-non",
+    "track": "ml-execution",
+    "module": "ml-execution/tensors-in-memory",
+    "title": "Contiguous vs Non-Contiguous",
+    "tldr": "- **Contiguous** means: walking through the tensor in its standard order also walks through memory in order. Cache lines are reused; coalesced GPU loads work.\n- **Non-contiguous** = the iteration order doesn't match memory order. Cache misses on every step; GPU loads serialize. **Slowdown is 5–20× depending on tensor size and access pattern**.\n- `tensor.is_contiguous()` checks; `tensor.contiguous()` returns a new contiguous copy if needed (or the same tensor if it already is).\n- The most common source of non-contiguity is `transpose()` followed by an op that walks the wrong axis. Adding `.contiguous()` after the transpose is the fix; sometimes the right answer is to *not* transpose and use `bmm` with the right axes instead.\n- **CUDA kernels** that aren't aware of strides typically *require* contiguous input — they index with `base + i*stride` assuming `stride` is implicit. Pass non-contiguous → silent garbage or seg fault."
+  },
+  {
+    "slug": "/ml-execution/tensors-in-memory/strides-and-layout",
+    "track": "ml-execution",
+    "module": "ml-execution/tensors-in-memory",
+    "title": "Strides & Layout",
+    "tldr": "- A **tensor** is `(buffer, shape, strides, dtype, offset)`. The buffer holds the bytes; shape and strides decide how to walk them.\n- **Stride[i] = how many elements to skip** to advance by 1 along axis i. For a contiguous row-major `(M, N)` tensor: strides are `(N, 1)`. Column-major: `(1, M)`.\n- Most tensor ops can be done **without copying** by changing strides: `transpose`, `view`, `permute`, `expand`, slicing along an axis. That's why `T.transpose(0, 1)` is O(1) — it just swaps strides.\n- The cost shows up later: a non-contiguous tensor read in the wrong order can be **10× slower** than a contiguous one because it ruins cache locality and breaks coalesced GPU loads.\n- **Almost every \"why is my model slow?\" mystery in PyTorch traces back to strides.** A `transpose` followed by a `view` blows up with a stride error; an `as_strided` on a temporary creates a footgun. Reading strides is reading the cost model."
+  },
+  {
+    "slug": "/ml-execution/tensors-in-memory/tensor-library",
+    "track": "ml-execution",
+    "module": "ml-execution/tensors-in-memory",
+    "title": "Build a Tensor Library",
+    "tldr": "- A tensor library is **smaller than people think**: ~200 lines of Python gets you strided views, broadcasting, and a handful of ops good enough to train MNIST.\n- The four types you need: `Buffer` (raw memory), `Tensor` (buffer + shape + strides + offset), `Op` (forward + backward), `Engine` (the autograd graph + topological execution).\n- **Once you've written one yourself, every \"magic\" in PyTorch / JAX becomes legible**: shape errors, stride bugs, retain_graph weirdness, why `.detach()` exists.\n- Real production libraries (PyTorch, JAX, tinygrad) add: dispatch to backends (CUDA, MPS, ROCm), op fusion, JIT compilation, distributed semantics. All of this is bolted onto the same core abstraction.\n- The lesson companion is the [module capstone](./index) — a 200-line tinygrad clone running MNIST."
+  },
+  {
+    "slug": "/ml-execution/tensors-in-memory/tma-async-copy",
+    "track": "ml-execution",
+    "module": "ml-execution/tensors-in-memory",
+    "title": "TMA & cp.async",
+    "tldr": "- The single biggest perf insight in modern GPU kernels: **don't make threads wait for memory**. Use a hardware engine to copy bytes from HBM to SMEM in the background while the warp keeps computing.\n- **`cp.async`** (Ampere, 2020) was the first such instruction: a thread issues an async copy from HBM to SMEM, then later does a `cp.async.wait_group` when it actually needs the data. While waiting, the warp can do other work.\n- **TMA — Tensor Memory Accelerator** (Hopper, 2022) generalizes this: one *thread* issues a copy of an entire 2D/3D *tile* (described by a precomputed TMA descriptor), and a hardware engine performs the entire copy. No 32-thread cooperation needed.\n- **TMA + warp specialization + multi-stage pipeline** is the recipe behind FlashAttention-3, every CUTLASS 4 GEMM, all of cuBLAS on Hopper, and most modern Triton kernels: producer warps issue TMA loads, consumer warps do the math, perfect overlap.\n- Blackwell extends the design with a **CTA-cluster TMA**: one TMA descriptor can populate SMEM across multiple CTAs in a cluster simultaneously, enabling new kernel topologies."
+  },
+  {
     "slug": "/training/distributed/fsdp",
     "track": "training",
     "module": "training/distributed",
