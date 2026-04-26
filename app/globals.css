@@ -484,7 +484,7 @@ body {
 }
 
 /* Mobile shell breakpoints */
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .m-nav-tabs { display: none; }
   .m-nav-burger { display: inline-flex; align-items: center; justify-content: center; }
   .m-nav-actions { gap: 0.2rem; margin-left: auto; }
@@ -679,7 +679,7 @@ body {
 .m-tile-cluster.tl { top: 6%; left: 4%; }
 .m-tile-cluster.br { bottom: 6%; right: 4%; transform: rotate(180deg); }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .m-tile-cluster { display: none; }
 }
 
@@ -935,7 +935,7 @@ body {
   transform: translateX(3px);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .m-paths { padding: 3.5rem 1.25rem 2.5rem; }
   .m-paths-heading { font-size: 1.75rem; }
 }
@@ -1343,7 +1343,7 @@ body {
 /* ============================================================
    Mobile responsiveness — global polish
    ============================================================ */
-@media (max-width: 880px) {
+@media (max-width: 1024px) {
   .m-hero { min-height: 78vh; padding: 5rem 1.25rem 4rem; }
   .m-tracks-section { padding: 4rem 1.25rem; }
   .m-pillars { padding: 3.5rem 1.25rem; }
@@ -1368,7 +1368,7 @@ body {
   .m-hero-tagline { font-size: clamp(1rem, 4vw, 1.25rem); }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 640px) {
   .m-hero { padding: 4rem 1rem 3rem; }
   .m-pillars-inner { grid-template-columns: 1fr; }
   .m-hero-cta-row { flex-direction: column; width: 100%; }
@@ -1609,7 +1609,7 @@ body {
 }
 
 /* Mobile track-banner adjustments */
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .m-resource { flex-direction: column; gap: 0.4rem; }
   .m-resource-tag { min-width: auto; align-self: flex-start; }
 }
@@ -1857,7 +1857,7 @@ body {
 .m-footer-dot { color: var(--m-fg-dim); opacity: 0.5; }
 .m-footer-fine { color: var(--m-fg-dim); }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .m-footer { padding: 0.95rem 1.1rem; font-size: 0.78rem; }
   .m-footer-inner { gap: 0.6rem; justify-content: center; text-align: center; }
 }
@@ -1891,7 +1891,7 @@ body {
 }
 .m-capstone-title {
   font-family: var(--font-display), Georgia, serif;
-  font-size: 1.5rem;
+  font-size: clamp(1.25rem, 3vw, 1.5rem);
   font-weight: 600;
   letter-spacing: -0.015em;
   color: var(--m-fg);
@@ -2115,9 +2115,8 @@ body {
   color: var(--m-bg);
 }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .m-capstone-body { padding: 1.2rem 1.2rem 1.4rem; }
-  .m-capstone-title { font-size: 1.25rem; }
   .m-capstone-pitch { font-size: 0.98rem; }
   .m-capstone-cta { flex-direction: column; }
   .m-capstone-btn { text-align: center; }
@@ -2170,7 +2169,7 @@ h2.m-focus-h2.is-active {
 }
 
 /* Mobile: tighter spacing */
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   h2.m-focus-h2 {
     margin-left: -1.25rem;
     padding-left: 1rem;
@@ -2257,9 +2256,23 @@ h2.m-focus-h2.is-active {
   opacity: 0.5;
 }
 
-/* Hide section dots on small screens / when too few sections */
-@media (max-width: 1100px) {
+/* Hide section dots only on phones; tablet + larger keeps the stepper.
+   Touch devices get a 44×44 tap target while the visible pip stays small. */
+@media (max-width: 640px) {
   .m-section-dots { display: none; }
+}
+@media (hover: none) and (pointer: coarse) and (min-width: 641px) {
+  .m-section-dot { width: 44px; height: 44px; }
+  .m-section-dots { gap: 0.25rem; padding: 0.4rem 0.3rem; }
+}
+
+/* Touch-device tap-target floor (44px) for all interactive controls.
+   Visual padding stays tight on desktop; only coarse pointers expand. */
+@media (hover: none) and (pointer: coarse) {
+  .m-quiz-option { min-height: 44px; padding: 0.85rem 0.95rem; }
+  .m-run-btn { min-height: 44px; padding: 0.7rem 1.4rem; font-size: 0.95rem; }
+  .m-fillin-btn { min-height: 44px; padding: 0.65rem 1.05rem; font-size: 0.92rem; }
+  .m-fillin-input { min-height: 44px; }
 }
 
 /* ============================================================
@@ -2325,7 +2338,7 @@ h2.m-focus-h2.is-active {
 }
 
 /* Mobile code blocks: full bleed */
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .m-prose pre {
     border-radius: 0;
     margin-left: -1.25rem;
@@ -2680,6 +2693,9 @@ h2.m-focus-h2.is-active {
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.9rem;
   white-space: pre-wrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 
 .m-fillin-fixed {
@@ -2797,7 +2813,7 @@ h2.m-focus-h2.is-active {
   font-size: 0.85rem;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .m-fillin-hint { margin-left: 0; width: 100%; }
 }
 
@@ -2883,7 +2899,7 @@ h2.m-focus-h2.is-active {
   max-height: 22rem;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   /* On phones, the editor textarea is hostile (tiny, awkward selection).
      Show a read-only highlighted pre; users tweak via variant chips. */
   .m-run-code-desktop { display: none; }
@@ -2929,7 +2945,7 @@ h2.m-focus-h2.is-active {
 [data-theme='light'] .m-run-pre .token.decorator,
 [data-theme='light'] .m-run-code-mobile .token.decorator { color: #e25700; }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   /* On phones, the textarea is hostile (tiny, no autocomplete, awkward selection).
      Show a read-only pre and let users tweak via variant chips instead. */
   .m-run-code-desktop { display: none; }
@@ -3155,7 +3171,7 @@ h2.m-focus-h2.is-active {
 /* ============================================================
    Mobile bottom nav for lessons
    ============================================================ */
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .m-lesson-footer-row {
     position: fixed;
     bottom: 0;
@@ -3333,7 +3349,7 @@ h2.m-focus-h2.is-active {
 /* ============================================================
    Mobile map — vertical track list replaces hex grid
    ============================================================ */
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .m-mosaic-svg { display: none; }
   .m-mosaic-hint { display: none; }
 
@@ -3415,7 +3431,7 @@ h2.m-focus-h2.is-active {
 /* ============================================================
    Track grid — show 6 tracks in 3x2 on wide, 2 col on medium
    ============================================================ */
-@media (min-width: 760px) {
+@media (min-width: 768px) {
   .m-track-grid {
     grid-template-columns: repeat(3, 1fr);
   }
