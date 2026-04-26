@@ -1,16 +1,30 @@
 ---
-title: Distillation
-description: How small models get good — the recipes behind TinyLlama, MiniCPM, Qwen2.5-Mobile, and the edge-LLM era.
+title: Distillation & Inference
+description: How small models get good — distillation recipes plus the inference tricks (speculative decoding) that make local LLMs feel snappy.
 last_reviewed: 2026-04-26
 ---
-# Distillation
+# Distillation & Inference
 
-A 3B model that runs on a phone won't beat a 405B that runs in a data center on benchmarks — but it's only ~5 points behind on most chat use cases, and it runs offline on $50 of silicon. **The art of getting there is distillation, careful pretraining recipes, and post-training.**
+A 3B model that runs on a phone won't beat a 405B in a data center on benchmarks — but it's only ~5 points behind on most chat use cases, and it runs offline on $50 of silicon. Two skills get you the rest of the way: **distillation** (how the 3B was trained to punch above its weight) and **speculative decoding** (how to make the 3B feel 2× faster at inference time without changing the weights).
 
 <ModuleProgress
   lessons={[
     { slug: '/edge-ai/distillation/small-llms', title: 'Small LLMs & Distillation', estMin: 14 },
+    { slug: '/edge-ai/distillation/speculative-decoding', title: 'Speculative Decoding', estMin: 16 },
   ]}
 />
 
-> Lesson coming: TinyLlama deep dive · MiniCPM training recipe · Qwen2.5-Mobile post-training
+<Capstone
+  title="Get 2× tok/s on a phone by adding a 0.5B draft model"
+  pitch="Same target model, same hardware, twice the throughput. The trick is on-device speculative decoding — and the math works."
+  what="Take a llama.cpp setup running Llama-3.2-3B-Instruct on iPhone (from the [On-Device capstone](../on-device)). Add Llama-3.2-1B-Instruct as the draft model. Implement speculative decoding (llama.cpp has a built-in speculative path). Measure tok/s before and after; verify outputs are bit-identical."
+  sota={['llama.cpp speculative API (`llama_speculative_*`)', 'Llama-3.2-3B-Instruct as target (Q4_K_M)', 'Llama-3.2-1B-Instruct as draft (Q4_K_M)', 'iPhone 15 Pro for benchmarking']}
+  device="phone"
+  time="One focused weekend (~10 h)"
+  level="advanced"
+  outcomes={[
+    'A working speculative-decoding setup on phone — the most underused mobile inference optimization',
+    'Verified bit-identical output (the key correctness property of speculative decoding)',
+    'A benchmark report showing the acceptance rate, the per-token latency, and the resulting tok/s gain',
+  ]}
+/>

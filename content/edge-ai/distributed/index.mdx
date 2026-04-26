@@ -1,0 +1,73 @@
+---
+title: Distributed Edge
+description: Run a 70B model across multiple phones / laptops on a LAN. EXO, Petals, and the swarm-inference pattern.
+last_reviewed: 2026-04-26
+---
+# Distributed Edge
+
+A single phone fits a 7B; an iPad fits a 13B; a M2 Air fits a 30B at 4-bit. None of those fits a 70B. But four of them on a Wi-Fi network do — and the math says the LAN is fast enough that pipeline-parallel inference works. **EXO** (the open-source clustering framework) and **Petals** (the BitTorrent-style swarm-inference network) make this practical today. This module covers how the work is sharded, what the network has to be like, and the limits.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/edge-ai/distributed/exo-swarm', title: 'EXO & Swarm Inference', estMin: 16 },
+  ]}
+/>
+
+<Capstone
+  title="Cluster 4 devices into a 70B inference rig — using only what's on your desk"
+  pitch="Three laptops and a phone, one wifi network, one model that none of them could run alone. The future of off-cloud AI is a LAN."
+  what="Set up an EXO cluster on a home LAN: a M-series MacBook + an iPhone + a Pixel + a Linux laptop. Run Llama-3.3-70B-Instruct (4-bit, ~40 GB) sharded across them. Measure end-to-end tok/s, the per-hop network latency, and the impact of swapping one device out mid-run."
+  sota={['EXO 0.1+ (open-source)', 'Llama-3.3-70B-Instruct (4-bit GGUF)', 'A LAN with 1 Gbps wifi-6 or wired ethernet', '4 devices across iOS / Android / macOS / Linux', 'Tailscale (optional) for cross-network testing']}
+  device="cloud"
+  time="One focused weekend (~12 h)"
+  level="advanced"
+  steps={[
+    {
+      title: 'Stand up EXO on each device',
+      goal: 'Install EXO on the macOS, iOS, Android, and Linux devices. The framework auto-discovers peers on the LAN via mDNS. Confirm that running `exo` on each shows the others in the peer list.',
+      checkpoint: '`exo` on the macOS shows 3 connected peers (iOS, Android, Linux). Each device appears with its memory and TFLOPS estimate.',
+      trap: 'mDNS doesn\'t cross VLANs/subnets. If your IoT network is segregated from your main wifi, devices won\'t see each other. Use Tailscale\'s "subnet routes" feature or put everyone on the same SSID.',
+      est: '90 min',
+    },
+    {
+      title: 'Pull the 70B 4-bit model and let EXO partition it',
+      goal: 'Configure EXO to load Llama-3.3-70B-Instruct (Q4_K_M GGUF, ~40 GB). EXO uses each device\'s available memory to compute the partition: e.g. 24 GB MacBook gets layers 0–28, 8 GB iPhone gets layers 29–34, etc. The actual model weights stream from each device\'s local disk into RAM.',
+      checkpoint: 'EXO log shows the layer assignment for each device. Each device\'s memory rises but stays under its cap.',
+      trap: 'The phone has the lowest memory and ends up on the critical path. Pin a lightweight subset (output projection, embeddings) to the phone, not transformer blocks — the embedding lookup is cheap enough to not bottleneck.',
+      est: '120 min',
+    },
+    {
+      title: 'First inference + measure network hop',
+      goal: 'Send a prompt. Each token requires forward-passing through every device (pipeline-parallel-style). Capture the per-hop network latency by enabling EXO\'s trace mode. Find the slowest link.',
+      checkpoint: 'A prompt returns a coherent reply. Trace shows e.g. macOS→iPhone: 12 ms, iPhone→Pixel: 18 ms, Pixel→Linux: 8 ms.',
+      trap: 'Wifi-5 (802.11ac) can hit 30+ ms tail latency under contention; tail-latency directly hits per-token latency. Use wifi-6 or hardwire one device. The phone over LTE-shared-via-hotspot is unusable.',
+      est: '90 min',
+    },
+    {
+      title: 'Steady-state benchmark + bottleneck analysis',
+      goal: 'Generate 256 tokens, 5 runs. Median tok/s. Identify the bottleneck: is it network (high inter-device latency), is it compute (one slow device dominates), or memory bandwidth? Plot a "slowest stage per token" timeline.',
+      checkpoint: '~3–5 tok/s steady-state on a 4-device cluster (representative for 70B). The trace clearly shows which device or hop is the limit.',
+      trap: 'tok/s is dominated by the slowest device. Adding a fifth device often *slows* the cluster if it\'s an underpowered phone with a lossy wifi. The network is not free.',
+      est: '120 min',
+    },
+    {
+      title: 'Pull the plug — graceful degradation test',
+      goal: 'Unplug or close EXO on one device mid-run. Watch EXO repartition the model across the remaining 3 devices. Measure the recovery time and the new tok/s.',
+      checkpoint: 'After ~10–30 s of repartitioning, inference resumes on 3 devices at lower tok/s. No data loss.',
+      trap: 'The device pinned to memory-heavy layers can\'t be dropped without a longer pause — EXO has to redistribute those layers and re-stream the weights from disk. Document this behavior.',
+      est: '90 min',
+    },
+    {
+      title: 'Repo + write-up',
+      goal: 'Repo with: setup script, the run-it command, the bench plot, the trace timeline, and the recovery plot. README explains the pipeline-parallel pattern, the network requirements, and when this beats a cloud API.',
+      checkpoint: 'A reader can clone, follow the README, and reproduce 3–5 tok/s on 70B with their own 4-device LAN.',
+      est: '90 min',
+    },
+  ]}
+  outcomes={[
+    'A working multi-device LLM cluster — the canonical "no cloud, no GPU, just a LAN" demo',
+    'Felt knowledge of how network latency interacts with pipeline-parallel inference',
+    'A measurement methodology for LAN-distributed inference you can re-use for new models and devices',
+    'A repo + benchmark report that makes the "Edge AI is the future of distributed inference" claim concrete',
+  ]}
+/>

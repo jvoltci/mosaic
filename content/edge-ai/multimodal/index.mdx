@@ -1,0 +1,67 @@
+---
+title: Multimodal Edge
+description: Speech and vision on-device — Whisper.cpp, LLaVA-mobile, Phi-3.5-Vision, MiniCPM-V.
+last_reviewed: 2026-04-26
+---
+# Multimodal Edge
+
+Voice and vision are the killer mobile features. Voice because typing on a phone is friction; vision because the camera is always on. This module covers the two most useful 2026 stacks: **Whisper.cpp** for streaming speech (the ggml-runtime sibling of llama.cpp) and **mobile VLMs** (Phi-3.5-Vision, LLaVA-mobile, MiniCPM-V — all under 8 GB at 4-bit).
+
+<ModuleProgress
+  lessons={[
+    { slug: '/edge-ai/multimodal/whisper-cpp', title: 'Whisper.cpp & On-Device Speech', estMin: 16 },
+    { slug: '/edge-ai/multimodal/mobile-vlm', title: 'Mobile VLMs', estMin: 16 },
+  ]}
+/>
+
+<Capstone
+  title="Build a fully-offline voice assistant for iPhone"
+  pitch="Camera in, microphone in, no cloud. Ask 'what is this?' and watch a phone reason about a photo with no signal."
+  what="A SwiftUI iOS app that does: (1) push-to-talk → Whisper.cpp small.en transcription, (2) photo capture → MiniCPM-V-2.6 description, (3) the transcription + caption fed into a local Llama-3.2-3B-Instruct (via llama.cpp) that answers. All on-device. Bench end-to-end latency from button press to first answer token; target under 3 s on iPhone 15 Pro."
+  sota={['Whisper.cpp small.en (Q5_1)', 'MiniCPM-V-2.6 (Q4_K_M, ~5 GB)', 'Llama-3.2-3B-Instruct (Q4_K_M, ~2 GB)', 'llama.cpp Metal backend', 'SwiftUI + AVFoundation']}
+  device="phone"
+  time="Two focused weekends (~16–20 h)"
+  level="advanced"
+  steps={[
+    {
+      title: 'Wire Whisper.cpp small.en into the app',
+      goal: 'Build whisper.cpp\'s XCFramework with Metal enabled. Load `ggml-small.en-q5_1.bin` (~244 MB). Implement push-to-talk: AVFoundation 16 kHz mono recording → whisper_full → text. Display the live transcript as it streams.',
+      checkpoint: 'Speak into the mic, see your words appear with under 500 ms lag after release on iPhone 15 Pro.',
+      trap: 'The audio sample rate must be exactly 16 000 Hz mono — AVFoundation defaults are 44.1 kHz stereo. Resample with `AVAudioConverter` or get garbage transcripts.',
+      est: '180 min',
+    },
+    {
+      title: 'Wire MiniCPM-V-2.6 for image captioning',
+      goal: 'Convert MiniCPM-V to GGUF (Q4_K_M) using the llama.cpp conversion scripts. Bundle. Add a "take photo" button → AVCaptureSession → run the VLM with `<image>describe this</image>`. Display the caption.',
+      checkpoint: 'Take a photo of a coffee cup; the model says "a coffee cup on a wooden desk" or similar within 4 s.',
+      trap: 'MiniCPM-V image preprocessing requires specific resolution and aspect-ratio handling — use the provided minicpmv-cli reference, not generic image resize. Wrong preprocessing tanks accuracy without erroring.',
+      est: '240 min',
+    },
+    {
+      title: 'Wire Llama-3.2-3B-Instruct for answering',
+      goal: 'Same llama.cpp Metal backend, second model context. Build a prompt template: "User said: {transcript}\\n\\nThey are looking at: {caption}\\n\\nAnswer their question briefly." Stream the response.',
+      checkpoint: 'After speech + photo, the answer streams within 1–2 s of capture.',
+      trap: 'Loading two models simultaneously (3B + 5GB VLM + 244 MB Whisper) busts the iPhone\'s ~6 GB usable memory limit on 8 GB devices. Solution: lazy-load the VLM only when a photo is taken; release after caption.',
+      est: '180 min',
+    },
+    {
+      title: 'Glue + UX — make it feel finished',
+      goal: 'A single-screen SwiftUI app: big "Hold to speak" button, "Take photo" button, scrollable transcript history. Haptic feedback on button press. Shows model status (loaded / loading) so users aren\'t confused.',
+      checkpoint: 'A non-technical friend can pick up the phone and use it without instruction.',
+      est: '120 min',
+    },
+    {
+      title: 'Benchmark end-to-end + write up',
+      goal: 'Measure: time-to-transcript (release button → text shown), time-to-caption (photo → text), time-to-answer-first-token. Repeat 10× per metric. Plot. Document the trade-offs (smaller models = faster but worse).',
+      checkpoint: 'Median end-to-end latency under 3 s on iPhone 15 Pro. README has the bench table + a 30 s demo video.',
+      trap: 'iPhone thermals throttle after 60 s of continuous inference; the first 3 runs look great, runs 10–20 are 30% slower. Note this in the writeup or your benchmark looks dishonest.',
+      est: '120 min',
+    },
+  ]}
+  outcomes={[
+    'A working offline multimodal assistant — the most viscerally impressive Edge AI demo possible',
+    'Felt knowledge of memory budgets when juggling 3 on-device models at once',
+    'A pattern for ggml-runtime app architecture that extends to whatever the next mobile model is',
+    'A benchmark report grounded in real iPhone numbers, not synthetic ones',
+  ]}
+/>

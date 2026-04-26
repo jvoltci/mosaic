@@ -1,0 +1,214 @@
+---
+title: WebGPU & WebLLM
+description: Run a 7B LLM in a browser tab — MLC-LLM, transformers.js, WebGPU shaders, WebNN. The universal-runtime story.
+last_reviewed: 2026-04-26
+---
+# WebGPU & WebLLM
+
+## TL;DR
+
+- **WebGPU** is the W3C-standard browser GPU API. Stable in Chrome 113+, Edge 113+, Safari 26+; Firefox is behind a flag. It compiles **WGSL** (a Rust-flavored shader language) to whatever the device's GPU stack speaks: Metal on Apple, D3D12 on Windows, Vulkan on everything else.
+- **WebLLM** (`@mlc-ai/web-llm`) compiles transformers (Llama, Phi, Mistral, Gemma) to WGSL via the MLC compiler stack. The browser tab becomes the runtime. ~750 MB weights for 1B Q4F16; ~4 GB for 7B Q4F16; cached in IndexedDB.
+- **transformers.js** is the alternative — runs ONNX models via ONNX Runtime Web (WebGPU + WASM). Lower performance than WebLLM for LLMs, but a richer model zoo (BERT, CLIP, Whisper, segmentation).
+- **WebNN** is the upcoming W3C *neural network* API (not GPU shaders, NN ops). Currently shipping in Chrome 130+ on Windows + macOS. Targets the platform NPU (ANE on macOS, DirectML on Windows). Faster + more power-efficient than WebGPU for LLMs but the model coverage is still small.
+- The killer property: **a static-hosted website on GitHub Pages can deliver a 1B LLM that runs entirely client-side**. No server, no API key, no rate limit, no privacy concerns.
+
+## Why this matters
+
+Every other on-device path requires a native app. The browser is the only target where you can ship to "every device that exists on the internet" with a single static deploy. The 2026 inflection: WebGPU on iOS Safari shipped in 2024, on Android Chrome in 2023, on M-series Macs forever. Suddenly *every shipping device* can run a small LLM in a tab.
+
+This unlocks:
+
+- **Privacy-by-default LLM apps** — a code-explainer extension, a journaling app, a kid's tutor — where prompts literally never leave the device.
+- **Offline-capable PWAs** — the model lives in IndexedDB; the app keeps working in airplane mode.
+- **Zero-cost demos** — a $0/month static site with a working LLM that scales to a million users (the compute is on their devices).
+- **Embed-anywhere widgets** — a doc page on Stripe.com can run an LLM-powered help widget without round-tripping to OpenAI.
+
+The trade-off: the browser is a sandbox. You get ~50% of native performance and you pay a 5–60 second cold-load penalty. Both shrink every quarter.
+
+## Mental model
+
+```mermaid
+flowchart LR
+  TS[TypeScript app] --> webllm[@mlc-ai/web-llm]
+  webllm --> wgsl[WGSL kernels]
+  wgsl --> webgpu[WebGPU API]
+  webgpu --> driver{Browser GPU backend}
+  driver --> metal[Metal (Apple)]
+  driver --> d3d[D3D12 (Windows)]
+  driver --> vk[Vulkan (Linux/Android)]
+
+  webllm -.weights.-> idb[(IndexedDB cache)]
+  cdn[Cloudflare R2 / GitHub Pages] -.first load.-> idb
+```
+
+Two layers matter. **The compile pipeline** runs once when the model is built: PyTorch checkpoint → MLC's TVM compiler → WGSL kernels + a metadata file. **The runtime** runs on each tab open: download the kernels + weights (or hit the IndexedDB cache), JIT-compile the WGSL on the device's GPU, run inference. The first compile pass is where Chrome freezes for 3–5 s the first time someone opens your app.
+
+## Concrete walkthrough
+
+### What's actually in `@mlc-ai/web-llm`
+
+```ts
+import { CreateMLCEngine } from "@mlc-ai/web-llm"
+
+const engine = await CreateMLCEngine(
+  "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+  {
+    initProgressCallback: (p) => {
+      // p.progress is a float 0..1; p.text is "Fetching weights / Compiling…"
+      console.log(p.text, p.progress)
+    },
+  }
+)
+
+const response = await engine.chat.completions.create({
+  messages: [{ role: "user", content: "Why is the sky blue?" }],
+  stream: true,
+})
+
+for await (const chunk of response) {
+  const delta = chunk.choices[0].delta.content
+  process.stdout.write(delta || "")
+}
+```
+
+That's the whole API. It's deliberately OpenAI-compatible — `chat.completions.create` looks identical to `openai.chat.completions.create`. You can swap an OpenAI call for a local one by changing the import.
+
+### What `CreateMLCEngine` actually does on first run
+
+1. Fetches `mlc-chat-config.json` (model metadata: vocab size, context length, quantization).
+2. Fetches `*.bin` shards (the quantized weights — ~750 MB for 1B Q4F16, in 50 MB shards). Streams to IndexedDB as they download.
+3. Fetches `*.wasm` (the model's WGSL kernels packaged as a WebAssembly module).
+4. Initializes a WebGPU device: `navigator.gpu.requestAdapter()` → `adapter.requestDevice()`.
+5. **The freeze**: compiles every WGSL shader. ~50–200 shaders per model. Browser shows the tab as unresponsive for 3–5 s on first load.
+6. Loads weights from IndexedDB into GPU buffers.
+7. Returns the engine.
+
+On subsequent loads (same `model_id` + same browser), steps 1–3 hit IndexedDB instead of network. Total cold-load: 30–60 s on broadband. Warm-load: 2–5 s.
+
+### Quantization in the browser
+
+The MLC compiler ships **q4f16_1** as the default: 4-bit weights + FP16 activations. This is roughly equivalent to AWQ — group-wise asymmetric quantization with FP16 zero-points.
+
+The size math:
+
+| Param | Bytes/param | Llama-3.2-1B size | Llama-3.2-7B size |
+|---|---|---|---|
+| FP16 (full) | 2 | 2.4 GB | ~14 GB |
+| Q4F16 (MLC default) | ~0.5 | 750 MB | ~4 GB |
+| Q4F16 + KV at FP16 | ~0.5 | ~1.0 GB working | ~5.5 GB working |
+
+7B at 4 bits *just* fits on a phone with 6 GB usable memory; 1B is comfortable on anything.
+
+### WebGPU's actual performance
+
+The honest numbers, from MLC-LLM's own benchmarks on Llama-3.2-1B Q4F16:
+
+| Device | Browser | Tok/s |
+|---|---|---|
+| M2 MacBook Air | Chrome 130 | 70–80 |
+| M2 MacBook Air | Safari 17.4 | 50–60 |
+| iPhone 15 Pro | Safari 17.4 | 18–22 |
+| Pixel 8 | Chrome 130 | 14–18 |
+| $300 Chromebook (Intel UHD) | Chrome 130 | 4–6 |
+
+For 7B Q4F16: roughly half the tok/s, but you also need the device to fit it in memory.
+
+The throttle is **GPU memory bandwidth**, not compute. WebGPU adds ~20% overhead vs. native MLC (which uses Metal/Vulkan directly), mostly from API cost and the WGSL shader-compile constraint that some optimizations native compilers do (e.g. CUDA's tiled-MM intrinsics) aren't expressible in WGSL.
+
+### WebNN — the next-generation alternative
+
+WebGPU asks you to write shaders. **WebNN** asks you to describe the model as ops:
+
+```ts
+const builder = new MLGraphBuilder(context)
+const a = builder.input('a', { dataType: 'float32', shape: [1, 768] })
+const b = builder.constant({ dataType: 'float32', shape: [768, 768] }, weights)
+const c = builder.matmul(a, b)
+const graph = await builder.build({ c })
+```
+
+The browser then routes the graph to the platform's accelerator: ANE on macOS, DirectML→NPU on Windows, eventually NNAPI on Android. WebNN runs **2–4× faster than WebGPU on devices with a real NPU** because it bypasses the GPU entirely.
+
+The catch: WebNN is shipping in Chrome 130+ on Windows + macOS as of 2026, but model coverage is still small (no Llama yet — only the basic CV/CNN models). The MLC team has stated they'll add a WebNN backend once the op coverage stabilizes. Watch this space.
+
+### Choosing between WebLLM, transformers.js, and WebNN
+
+| If you want… | Use |
+|---|---|
+| A chatbot UI with Llama / Phi / Mistral / Gemma | WebLLM |
+| Whisper, BERT, CLIP, segmentation, embeddings | transformers.js |
+| The fastest LLM inference on a 2026 device with an NPU | WebNN (when the model you want is supported; otherwise WebLLM) |
+| The smallest possible bundle for a one-off task | transformers.js with the WASM-only backend (no WebGPU) |
+
+WebLLM is the right default for new chat-style apps. transformers.js is the right default for everything else.
+
+## Run it in your browser
+
+A practical demo: simulate WebLLM's IndexedDB cache behavior. The browser stores model shards keyed by URL; subsequent loads skip the network entirely.
+
+<RunInBrowser
+  description="Simulate the cache-hit math: how does cold-load vs. warm-load look as you bump the model size and the network speed?"
+  code={`# Simulate WebLLM's IndexedDB cache behavior.
+def load_time(weights_mb, network_mbps, cached, shader_compile_s, gpu_load_s):
+    if cached:
+        # Warm path: read from IndexedDB (~500 MB/s on M-series, ~150 MB/s on phones)
+        # Skip shader compile (cached); skip network.
+        idb_speed_mbps = 250  # average across devices
+        return weights_mb / idb_speed_mbps + gpu_load_s
+    else:
+        # Cold path: network + first-shader-compile + GPU load
+        network_s = (weights_mb * 8) / network_mbps  # MB → Mb → s
+        return network_s + shader_compile_s + gpu_load_s
+
+# Llama-3.2-1B Q4F16 = 750 MB
+# Llama-3.2-7B Q4F16 = 4000 MB
+for name, mb in [("1B", 750), ("3B", 1900), ("7B", 4000)]:
+    cold_50 = load_time(mb, 50, False, 4.0, 1.5)
+    cold_100 = load_time(mb, 100, False, 4.0, 1.5)
+    warm = load_time(mb, 0, True, 0.0, 1.5)
+    print(f"{name:>3}  cold@50Mbps={cold_50:5.1f}s  cold@100Mbps={cold_100:5.1f}s  warm={warm:4.1f}s")
+`}
+/>
+
+The headline insight from the math: cold-load on a phone over LTE is *unusable* for 7B (~10 minutes). 1B over broadband is fine (~2 minutes). For most apps, target 1B–3B and accept the cold-load cost on first visit; warm-load is always fast.
+
+## Quick check
+
+<Quiz
+  question="A user opens your WebLLM-powered site for the second time on the same phone, same browser. They get a 3-second freeze right when they expect tokens to start. What is happening?"
+  options={[
+    "WebGPU is recompiling all the WGSL shaders because the cache is invalid.",
+    "IndexedDB is reading the weights into GPU memory on the main thread.",
+    "WebGPU is doing first-token JIT shader specialization for the actual GPU buffer shapes — separate from the initial shader compile.",
+    "The MLC engine is re-fetching the model config file from network.",
+  ]}
+  answer={2}
+  explanation="WebGPU has two compile stages — the initial WGSL compile (cached after first load) and a per-buffer-shape specialization pass that happens the first time tokens flow through the pipeline. The latter is *not* cached and explains the second-load freeze. The fix: warm the model with a 1-token throwaway inference call right after CreateMLCEngine returns, while you still own the loading screen."
+/>
+
+## Key takeaways
+
+1. **WebGPU is the W3C-standard universal GPU** — same WGSL kernel runs on Metal, D3D12, and Vulkan. Stable in every modern browser.
+2. **WebLLM** (`@mlc-ai/web-llm`) is the production-ready way to ship Llama / Phi / Mistral / Gemma to a browser tab. OpenAI-compatible API.
+3. **transformers.js** covers everything else (Whisper, CLIP, BERT, segmentation) but is slower for LLMs.
+4. **The cold-load cost** is real — 30–60 s for 1B on broadband — but warm-load is 2–5 s and IndexedDB-cached.
+5. **WebNN is the future** for LLM inference on devices with NPUs (2–4× faster than WebGPU), but op coverage in 2026 is still limited.
+6. **A static deploy on GitHub Pages can serve a working LLM** to a million users for $0/month.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'docs', href: 'https://webllm.mlc.ai/', title: 'WebLLM Docs', author: 'MLC Team', note: 'API reference, prebuilt model list, browser compat matrix.' },
+    { kind: 'docs', href: 'https://www.w3.org/TR/webgpu/', title: 'WebGPU Specification', author: 'W3C', note: 'The W3C standard. Skim §2 (concepts) and §13 (WGSL).' },
+    { kind: 'docs', href: 'https://huggingface.co/docs/transformers.js', title: 'transformers.js Docs', author: 'Hugging Face', note: 'The model zoo + pipelines; the WASM/WebGPU runtime story.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2406.10301', title: 'MLC-LLM: Universal LLM Deployment Engine With ML Compilation', author: 'Lai et al., 2024', note: 'The compiler stack behind WebLLM — TVM Unity, kernel generation, the WebGPU backend.' },
+    { kind: 'docs', href: 'https://www.w3.org/TR/webnn/', title: 'WebNN Specification', author: 'W3C', note: 'The next-generation NN API. Skim the op list to see what models are reachable.' },
+    { kind: 'blog', href: 'https://blog.mlc.ai/2024/04/20/GPU-Accelerated-LLM-on-Orange-Pi', title: 'GPU-Accelerated LLM on a $50 Orange Pi via WebGPU', author: 'MLC Team', note: 'Concrete numbers from the smallest device class. Hits the universality theme directly.' },
+    { kind: 'repo', href: 'https://github.com/mlc-ai/web-llm', title: 'mlc-ai/web-llm', author: 'MLC Team', note: 'The reference implementation; read `src/engine.ts` for the full lifecycle.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=ywfM5Z4tt08', title: 'WebGPU Inference: From Shader to Token', author: 'Tianqi Chen', note: 'The technical talk for the algorithmic-deep-dive crowd.' },
+  ]}
+/>
+
+<LessonComplete />

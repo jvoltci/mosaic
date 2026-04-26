@@ -3,4 +3,5 @@ export default {
   'llama-cpp-internals': 'llama.cpp Internals',
   executorch: 'ExecuTorch',
   coreml: 'Core ML & ANE',
+  tflite: 'TFLite & LiteRT',
 }

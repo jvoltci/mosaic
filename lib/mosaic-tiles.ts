@@ -195,12 +195,22 @@ export const TILES: Tile[] = [
   { slug: '/edge-ai/on-device/llama-cpp-internals', fallback: '/edge-ai/on-device', title: 'llama.cpp Internals',     summary: 'GGUF, mmap, Metal/Vulkan/NEON — the canonical local LLM runtime.',     track: 'edge-ai', moduleName: 'On-Device', q: -9, r: 5, illustration: 'placeholder', available: true },
   { slug: '/edge-ai/on-device/executorch',          fallback: '/edge-ai/on-device', title: 'ExecuTorch',              summary: 'PyTorch\'s mobile runtime — torch.export → EXIR → .pte on iOS/Android.', track: 'edge-ai', moduleName: 'On-Device', q: -8, r: 5, illustration: 'placeholder', available: true },
   { slug: '/edge-ai/on-device/coreml',              fallback: '/edge-ai/on-device', title: 'Core ML & ANE',           summary: 'Apple Neural Engine; Core ML + MLX as the iOS Intelligence stack.',     track: 'edge-ai', moduleName: 'On-Device', q: -7, r: 5, illustration: 'placeholder', available: true },
+  { slug: '/edge-ai/on-device/tflite',              fallback: '/edge-ai/on-device', title: 'TFLite & LiteRT',         summary: 'Android\'s standard runtime; XNNPACK, NNAPI, GPU/Hexagon delegates.',    track: 'edge-ai', moduleName: 'On-Device', q: -7, r: 6, illustration: 'placeholder', available: true },
+  // Module: Browser (WebGPU)
+  { slug: '/edge-ai/browser/webgpu-webllm',         fallback: '/edge-ai/browser', title: 'WebGPU & WebLLM',          summary: 'Run 7B in a browser tab — MLC-LLM, transformers.js, WebNN.',           track: 'edge-ai', moduleName: 'Browser', q: -10, r: 5, illustration: 'placeholder', available: true },
+  // Module: Multimodal Edge
+  { slug: '/edge-ai/multimodal/whisper-cpp',        fallback: '/edge-ai/multimodal', title: 'Whisper.cpp & On-Device Speech', summary: 'Real-time STT on phones — VAD, chunking, streaming decode.',  track: 'edge-ai', moduleName: 'Multimodal', q: -10, r: 6, illustration: 'placeholder', available: true },
+  { slug: '/edge-ai/multimodal/mobile-vlm',         fallback: '/edge-ai/multimodal', title: 'Mobile VLMs',           summary: 'LLaVA-mobile, Phi-3.5-Vision, MiniCPM-V — VLMs that fit on a phone.', track: 'edge-ai', moduleName: 'Multimodal', q: -10, r: 7, illustration: 'placeholder', available: true },
+  // Module: Distributed Edge
+  { slug: '/edge-ai/distributed/exo-swarm',         fallback: '/edge-ai/distributed', title: 'EXO & Swarm Inference', summary: 'Run 70B across 4 phones on a LAN — sharded inference, zero cloud.',   track: 'edge-ai', moduleName: 'Distributed', q: -9, r: 8, illustration: 'placeholder', available: true },
   // Module: NPU Stacks
   { slug: '/edge-ai/npu/hexagon',                   fallback: '/edge-ai/npu', title: 'Qualcomm Hexagon',         summary: 'Snapdragon NPU; QNN SDK; INT4/INT8 paths for Android phones + robots.', track: 'edge-ai', moduleName: 'NPU', q: -9, r: 6, illustration: 'placeholder', available: true },
+  { slug: '/edge-ai/npu/apple-ane',                 fallback: '/edge-ai/npu', title: 'Apple Neural Engine',      summary: 'ANE op set, the 16K-tensor cap, the ANE compiler, profiling on device.', track: 'edge-ai', moduleName: 'NPU', q: -8, r: 7, illustration: 'placeholder', available: true },
   // Module: Edge Quantization
   { slug: '/edge-ai/edge-quant/gguf-and-imatrix',   fallback: '/edge-ai/edge-quant', title: 'GGUF & i-matrix',     summary: 'The local-LLM file format; importance-matrix calibration; K-quants.',  track: 'edge-ai', moduleName: 'Edge Quant', q: -9, r: 7, illustration: 'placeholder', available: true },
-  // Module: Distillation
+  // Module: Distillation & Inference Tricks
   { slug: '/edge-ai/distillation/small-llms',       fallback: '/edge-ai/distillation', title: 'Small LLMs & Distillation', summary: 'TinyLlama, MiniCPM, Qwen2.5-Mobile recipes — how 3B models are made.', track: 'edge-ai', moduleName: 'Distillation', q: -8, r: 6, illustration: 'placeholder', available: true },
+  { slug: '/edge-ai/distillation/speculative-decoding', fallback: '/edge-ai/distillation', title: 'Speculative Decoding', summary: 'Eagle, Medusa, lookahead — 2× tok/s on a phone, with the math.',     track: 'edge-ai', moduleName: 'Distillation', q: -7, r: 7, illustration: 'placeholder', available: true },
 ]
 
 export const ANCHOR_TILES = ['stack-vs-heap', 'gemm', 'rope', 'kv-cache', 'mlir']

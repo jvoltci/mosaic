@@ -255,6 +255,25 @@ Capstones are the part of Mosaic that puts a finished thing in someone's portfol
 
 ---
 
+## MDX traps — caught automatically
+
+A few patterns repeatedly bite us when authoring MDX. `scripts/lint-mdx.mjs` runs as `prebuild` and `predev` and fails the build before any of them ship.
+
+The current rules:
+
+| Rule | Catches | Fix |
+| --- | --- | --- |
+| `lt-digit` | `<5%`, `<3 s`, `<1 WER` in body prose | Rewrite as "under N", "below N", or escape `&lt;` |
+| `lt-equals-digit` | `<=5` in body prose | "at most N" or "no more than N" |
+
+The linter strips inline backticks and JSX attribute strings before checking, so `` `<4 x float>` `` (markdown inline code) and `what="...<250 LOC"` (JSX attribute) are NOT flagged — they actually work fine in MDX.
+
+What the linter catches is the only thing that matters: **unquoted body prose with `<digit`**, which the MDX parser treats as a JSX tag-start and crashes the build with `Unexpected character '5' before name`. We've shipped this bug four times; the linter ensures we don't ship it a fifth.
+
+To extend: edit the `TRAPS` array in `scripts/lint-mdx.mjs`. Each rule is a regex + a one-line fix message + examples. Run `npm run lint-mdx` to check manually.
+
+---
+
 ## Mapping integrity
 
 Mosaic has five places a lesson must be registered (the `.mdx` file, the tile in `mosaic-tiles.ts`, the `_meta.ts` key, the `<ModuleProgress>` slug, and a `## TL;DR` for the cheatsheet). Drift between them caused real bugs (lessons that exist but don't appear on the map; tiles that exist but route to 404).

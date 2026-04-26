@@ -1,6 +1,6 @@
 ---
 title: Edge AI · On-Device
-description: AI off the cloud — phones, NPUs, robots, $50 boards. llama.cpp, ExecuTorch, Core ML, Hexagon, GGUF, distillation.
+description: AI off the cloud — phones, NPUs, browsers, swarms, robots. The runtimes, formats, recipes, and inference tricks that move LLMs out of data centers and onto every device.
 last_reviewed: 2026-04-26
 ---
 import { TrackBanner } from '../../components/TrackBanner'
@@ -10,20 +10,24 @@ import { TrackBanner } from '../../components/TrackBanner'
   icon="07"
   eyebrow="Track 07 · Edge AI · On-Device"
   title="AI off the cloud."
-  subtitle="Phones, NPUs, robots, $50 boards. The runtimes, formats, and recipes that move LLMs out of data centers and onto the device in your pocket."
+  subtitle="Phones, browsers, NPUs, swarms, $50 boards. The runtimes, formats, recipes, and inference tricks that move LLMs out of data centers and onto every device — including a LAN of phones running 70B together."
 />
 
 ## Modules in this track
 
-- **[On-Device Runtimes](/edge-ai/on-device)** — llama.cpp, ExecuTorch, Core ML. The three production paths.
-- **[NPU Stacks](/edge-ai/npu)** — Qualcomm Hexagon and the Apple Neural Engine programming models.
+- **[On-Device Runtimes](/edge-ai/on-device)** — llama.cpp, ExecuTorch, Core ML, TFLite/LiteRT. The four production runtimes that ship 99% of mobile inference.
+- **[Browser (WebGPU)](/edge-ai/browser)** — WebLLM, transformers.js, WebNN. Every device with a browser is now an inference target.
+- **[Multimodal Edge](/edge-ai/multimodal)** — Whisper.cpp for speech, mobile VLMs (LLaVA, Phi-3.5-Vision, MiniCPM-V) for vision. The killer phone features.
+- **[Distributed Edge](/edge-ai/distributed)** — EXO and swarm inference. Run 70B across 4 devices on a wifi network with no cloud.
+- **[NPU Stacks](/edge-ai/npu)** — Qualcomm Hexagon and Apple Neural Engine programming models, op limits, profilers.
 - **[Edge Quantization](/edge-ai/edge-quant)** — GGUF, K-quants, importance-matrix calibration. The 4-bit world.
-- **[Distillation](/edge-ai/distillation)** — TinyLlama, MiniCPM, Qwen2.5-Mobile. How small models get good.
+- **[Distillation & Inference](/edge-ai/distillation)** — Small LLM training recipes plus speculative decoding for 2× tok/s on phone.
 
 ## What you'll be able to do after
 
-- Ship a 4-bit LLM running on iOS or Android, fully offline
-- Read llama.cpp's source and understand the GGUF format end-to-end
-- Pick between Core ML, ExecuTorch, and llama.cpp for a given product constraint
-- Quantize a 7B model for edge deployment without losing more than 1–2 pts on your eval
-- Reason about the next 18 months of edge silicon (Hexagon, ANE, AMD XDNA, ARM Ethos)
+- Ship a 4-bit LLM running on iOS, Android, *and the browser* — fully offline, three different runtimes.
+- Read llama.cpp's source and understand the GGUF format end-to-end; write the same kind of code in Whisper.cpp.
+- Pick between Core ML, ExecuTorch, TFLite, llama.cpp, WebLLM, and a swarm cluster for any product constraint.
+- Quantize a 7B for edge deployment without losing more than 1–2 pts on your eval.
+- Cluster 4 phones / laptops on a LAN to run a 70B model with no cloud — pipeline-parallel inference at the edge.
+- Reason about the next 18 months of edge silicon: Hexagon, ANE, AMD XDNA, ARM Ethos, MediaTek APU, and the WebGPU/WebNN browser stack.

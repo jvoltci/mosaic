@@ -1,0 +1,80 @@
+---
+title: Browser (WebGPU)
+description: Run a 7B LLM in a browser tab — MLC-LLM, transformers.js, WebGPU, WebNN.
+last_reviewed: 2026-04-26
+---
+# Browser (WebGPU)
+
+The browser is the universal sandbox: every phone, every laptop, every Chromebook. WebGPU (stable in Chrome 113+, Safari 26+, Edge 113+) makes it real — you can compile a transformer kernel to WGSL once and have a 7B model run on a kid's $200 laptop with no install. This module covers the runtime stack and the practical limits.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/edge-ai/browser/webgpu-webllm', title: 'WebGPU & WebLLM', estMin: 16 },
+  ]}
+/>
+
+<Capstone
+  title="Ship a 1B-parameter LLM that runs entirely in a browser tab"
+  pitch="Static-host a chat UI on GitHub Pages. Open it on your phone. Watch a 1B model stream tokens with no server."
+  what="Build a static-hosted chat app using @mlc-ai/web-llm. Quantize Llama-3.2-1B-Instruct to MLC's q4f16 format, host the weights on Cloudflare R2 (free egress), wire a 200-line chat UI, deploy to GitHub Pages. Measure tok/s on Pixel-8/iPhone-15/M2 Air. Document model load time, weight cache behavior, and steady-state perf."
+  sota={['@mlc-ai/web-llm v0.2+', 'Llama-3.2-1B-Instruct (MLC q4f16)', 'WebGPU (Chrome 113+, Safari 26+)', 'Cloudflare R2 (free CDN)', 'GitHub Pages']}
+  device="phone"
+  time="One focused weekend (~10 h)"
+  level="advanced"
+  steps={[
+    {
+      title: 'Verify WebGPU works on your devices',
+      goal: 'Open chrome://gpu in Chrome (or Safari Develop → Experimental Features → WebGPU). Confirm "WebGPU: Hardware accelerated" on desktop + every phone you plan to test.',
+      checkpoint: 'WebGPU enabled on at least: a desktop browser, an iPhone, an Android phone.',
+      trap: 'Safari < 17.4 does not have WebGPU; Firefox stable does not yet either. Document the supported-browser matrix in your README so users don\'t hit a blank page.',
+      est: '20 min',
+    },
+    {
+      title: 'Quantize Llama-3.2-1B to MLC q4f16',
+      goal: 'Run mlc_llm convert_weight + mlc_llm gen_config on Llama-3.2-1B-Instruct. Output: a folder with `params_shard_*.bin` + `mlc-chat-config.json`. Total weight: ~750 MB.',
+      checkpoint: 'You can `ls` the converted folder and see N shards adding to ~750 MB.',
+      trap: 'MLC quantization configs are model-family specific — copy one from MLC\'s prebuilt configs first, then tweak. Custom quant configs without family-specific calibration drop quality measurably.',
+      est: '60 min',
+    },
+    {
+      title: 'Host the weights on Cloudflare R2',
+      goal: 'Create an R2 bucket, upload the converted folder, enable public access, point a custom CNAME at it. Verify a `curl` from a different network can pull a shard.',
+      checkpoint: '`curl https://your-bucket.r2.dev/Llama-3.2-1B-q4f16/params_shard_0.bin -I` returns 200.',
+      trap: 'CORS is the silent killer. Set `Access-Control-Allow-Origin: *` on the bucket; without it the browser fetch fails after the model has already shown a "loading…" UI.',
+      est: '40 min',
+    },
+    {
+      title: 'Wire @mlc-ai/web-llm into a Vite app',
+      goal: '`npm i @mlc-ai/web-llm`. Use `CreateMLCEngine(model_id, { initProgressCallback })` with a model_record pointing at your R2-hosted weights. Show a download progress bar (the first load is multi-hundred MB).',
+      checkpoint: 'You can ask the model a question on first page load and watch it stream a coherent reply, after the weights download.',
+      trap: 'web-llm caches model weights in IndexedDB; if you ship a new quantization but reuse the same `model_id`, users get stale weights. Bump the version suffix in the model_id when the weights change.',
+      est: '120 min',
+    },
+    {
+      title: 'Optimize first-load: progressive UI + cache hint',
+      goal: 'Render the chat UI immediately; show "Loading model (~750 MB, one-time)…" with a real progress bar. Add `<link rel="modulepreload">` for the WASM. After first load, IndexedDB serves from cache and the model opens in <2 s.',
+      checkpoint: 'Cold load (clear cache): UI visible in <500 ms, model usable in <60 s on broadband. Warm load: model usable in <3 s.',
+      trap: 'The browser blocks the main thread during WGSL shader compilation on first run; the UI freezes for 3–5 s right at the moment users expect tokens to start. Surface this to users with a "compiling shaders" message rather than silent freeze.',
+      est: '90 min',
+    },
+    {
+      title: 'Benchmark + document on real devices',
+      goal: 'Measure tok/s steady-state on: iPhone 15 (Safari), Pixel 8 (Chrome), M2 MacBook Air (Chrome), $300 Chromebook (Chrome). Make a table + plot in the README.',
+      checkpoint: 'README shows: device, browser, tok/s, peak RAM, time-to-first-token, weight-load time. Numbers feel realistic (M-series ≫ phones for compute-bound; cold-load is similar everywhere).',
+      trap: 'Tab throttling: if Safari/Chrome backgrounds the tab during a long benchmark run, tok/s plummets. Run benchmarks in the foreground.',
+      est: '90 min',
+    },
+    {
+      title: 'Deploy to GitHub Pages + write the README',
+      goal: 'Push the static build (`vite build`) to a `gh-pages` branch. Verify the live URL works on a phone over cellular (model download is ~750 MB — note this in the UI). README explains: how WebGPU + MLC works, the supported browsers, the benchmark numbers.',
+      checkpoint: 'A friend can open the URL on their phone, wait through the load, and chat with a 1B Llama running entirely on their device.',
+      est: '60 min',
+    },
+  ]}
+  outcomes={[
+    'A live URL where a 1B LLM streams tokens entirely client-side — the unambiguous portfolio piece for a "runs everywhere" engineer',
+    'Felt knowledge of WebGPU\'s shader-compilation latency and IndexedDB caching strategy',
+    'A benchmark methodology that compares phones, laptops, and Chromebooks on the same model',
+    'A static deploy that costs $0/month forever (no GPU, no API key, no rate limit)',
+  ]}
+/>

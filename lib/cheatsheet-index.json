@@ -196,6 +196,13 @@
     "tldr": "- `torch.compile(model)` swaps PyTorch's eager execution for **graph capture (Dynamo) + autograd compilation (AOTAutograd) + kernel codegen (Inductor)**.\n- **Dynamo** captures Python-level graphs by hooking into bytecode evaluation, falling back gracefully when it can't trace.\n- **AOTAutograd** lifts the Python autograd into a static forward+backward joint graph that the compiler can optimize together.\n- **Inductor** lowers the graph to **Triton kernels** for GPU and **C++ + OpenMP** for CPU. Fuses pointwise ops aggressively.\n- **Real-world wins:** **1.3–2× speedup on training**, **1.5–4× on inference**, mostly from kernel fusion and CUDA Graph capture. The default in PyTorch 2.5+."
   },
   {
+    "slug": "/edge-ai/browser/webgpu-webllm",
+    "track": "edge-ai",
+    "module": "edge-ai/browser",
+    "title": "WebGPU & WebLLM",
+    "tldr": "- **WebGPU** is the W3C-standard browser GPU API. Stable in Chrome 113+, Edge 113+, Safari 26+; Firefox is behind a flag. It compiles **WGSL** (a Rust-flavored shader language) to whatever the device's GPU stack speaks: Metal on Apple, D3D12 on Windows, Vulkan on everything else.\n- **WebLLM** (`@mlc-ai/web-llm`) compiles transformers (Llama, Phi, Mistral, Gemma) to WGSL via the MLC compiler stack. The browser tab becomes the runtime. ~750 MB weights for 1B Q4F16; ~4 GB for 7B Q4F16; cached in IndexedDB.\n- **transformers.js** is the alternative — runs ONNX models via ONNX Runtime Web (WebGPU + WASM). Lower performance than WebLLM for LLMs, but a richer model zoo (BERT, CLIP, Whisper, segmentation).\n- **WebNN** is the upcoming W3C *neural network* API (not GPU shaders, NN ops). Currently shipping in Chrome 130+ on Windows + macOS. Targets the platform NPU (ANE on macOS, DirectML on Windows). Faster + more power-efficient than WebGPU for LLMs but the model coverage is still small.\n- The killer property: **a static-hosted website on GitHub Pages can deliver a 1B LLM that runs entirely client-side**. No server, no API key, no rate limit, no privacy concerns."
+  },
+  {
     "slug": "/edge-ai/distillation/small-llms",
     "track": "edge-ai",
     "module": "edge-ai/distillation",
@@ -203,11 +210,46 @@
     "tldr": "- **Small LLMs (≤4B params)** are not just \"shrunk frontier models\" — they're produced via deliberate recipes that maximize signal per parameter. The 2024–2026 standard: train longer, distill from a frontier teacher, post-train carefully.\n- **Distillation** = train a small \"student\" to match a larger \"teacher's\" outputs (logits, hidden states, or chosen-vs-rejected preferences). Most modern small LLMs are distilled from a same-family large model — DeepSeek-V3-distill, Llama-3.3-distill, etc.\n- **Long pretraining matters more than data quality**: MiniCPM-3 (2.4B) trained on 5T tokens beats some 7B models trained on 1.5T. The \"scaling laws say small needs less\" intuition is wrong for small-but-deep training.\n- **Post-training is the gap closer**: SFT + DPO (or GRPO) with carefully-curated chat data closes most of the small-vs-large gap on the workloads people actually care about.\n- **TinyLlama (1.1B), MiniCPM-3 (2.4B), Qwen2.5-1.5B/3B, Phi-3.5-mini, Llama-3.2-1B/3B** are the 2026 reference small models. Each represents a slightly different recipe; understanding them is understanding the edge-LLM design space."
   },
   {
+    "slug": "/edge-ai/distillation/speculative-decoding",
+    "track": "edge-ai",
+    "module": "edge-ai/distillation",
+    "title": "Speculative Decoding",
+    "tldr": "- **Speculative decoding** makes an LLM generate tokens 2–4× faster *without changing the output*. The trick: a small **draft model** proposes K tokens; the **target model** verifies all K in one parallel forward pass; the longest accepted prefix is the new context. Tokens are bit-identical to running the target alone.\n- The math: instead of one forward per token at the slow model, you do one forward per K candidates — and the target model is bandwidth-bound on a phone, so verifying K tokens costs almost the same as decoding 1.\n- **Three families**: classic draft-target (Llama-3.2-1B → Llama-3.2-7B), **self-speculative** (Medusa, EAGLE — the model has additional heads that draft from itself), and **lookahead** (no draft model; an n-gram cache predicts).\n- On a phone the typical speedup is **1.8–2.5×** for matched-family pairs (1B drafting 7B), with **acceptance rate 60–80%** on chat workloads. Higher on code (where output is predictable), lower on creative writing.\n- llama.cpp ships speculative decoding as a first-class API (`llama_speculative_*`); it's a few lines of code on top of an existing setup. **Outputs are bit-identical to non-speculative.**"
+  },
+  {
+    "slug": "/edge-ai/distributed/exo-swarm",
+    "track": "edge-ai",
+    "module": "edge-ai/distributed",
+    "title": "EXO & Swarm Inference",
+    "tldr": "- **Swarm inference** is pipeline-parallel inference applied at the device-fleet level: shard a model's layers across N devices on a LAN, send activations between them, run a model none of them could run alone.\n- **EXO** (`exo-explore/exo`) is the open-source reference: Python framework, mDNS discovery, dynamic partitioning across iOS / Android / macOS / Linux. Uses `tinygrad` and `mlx` as backends. Released early 2024, ~12K GitHub stars.\n- **Petals** (`bigscience/petals`) is the BitTorrent-of-LLMs cousin — a public swarm where strangers share unused compute. Slower and less private than EXO but useful for genuinely large models (Llama-3.1-405B).\n- The math: a 4-device LAN running pipeline-parallel inference on a 70B model averages **3–5 tok/s** — readable but not snappy. The bottleneck is **per-hop network latency**, not compute.\n- **Wifi-6 or wired ethernet, ~12–30 ms per hop**. Wifi-5 (.11ac) hits 50–100 ms tail latency under contention and tanks tok/s."
+  },
+  {
     "slug": "/edge-ai/edge-quant/gguf-and-imatrix",
     "track": "edge-ai",
     "module": "edge-ai/edge-quant",
     "title": "GGUF & i-matrix",
     "tldr": "- **GGUF** carries quantized weights *plus* the recipe that quantized them. The K-quant variants (Q4_K_M, Q5_K_M, etc.) are baked into the format spec.\n- **K-quants store per-super-block (256 weights) statistics** plus per-sub-block (16/32 weights) refinements. More precision than naive INT4, no calibration data needed for \"OK\" results.\n- **The i-matrix (importance matrix)** is a calibration-driven addition. Compute activation statistics on a calibration dataset; weight the quantization-error metric *by importance* per channel; feed back into the K-quant chooser. **Bumps quality of Q4_K_M / Q3_K from \"OK\" to \"indistinguishable from FP16.\"**\n- The i-matrix is **optional but essentially free** to compute (~5 minutes on a calibration set). Most modern GGUF releases on Hugging Face ship i-matrix-quantized variants.\n- Reading per-quant size and quality numbers fluently — Q4_K_M ≈ 4.5 bits, Q5_K_M ≈ 5.5, Q6_K ≈ 6.6, Q8_0 ≈ 8.5 — is the price of admission for any local-LLM conversation in 2026."
+  },
+  {
+    "slug": "/edge-ai/multimodal/mobile-vlm",
+    "track": "edge-ai",
+    "module": "edge-ai/multimodal",
+    "title": "Mobile VLMs",
+    "tldr": "- A **VLM (vision-language model)** is an LLM with a vision encoder and a learned **projector** glued in front. Image goes through CLIP/SigLIP → projector → tokens → LLM. Output is text. Fits in any chat-shaped runtime.\n- The 2026 mobile zoo: **MiniCPM-V-2.6** (8B, ~5 GB at Q4_K_M, the practical pick), **Phi-3.5-Vision** (4.2B, ~3 GB, faster but less accurate), **LLaVA-Mobile / MobileVLM** (1–3B, ~2 GB), **PaliGemma** (3B, Google's open VLM, hard to beat for OCR).\n- The **projector** is a 2- or 3-layer MLP that maps CLIP/SigLIP features (1152-dim) to LLM token-embedding space (4096-dim for Llama-3-8B). It's tiny — ~10 MB. Most of the size is still the LLM.\n- Image preprocessing is the silent failure mode. **Each VLM uses a specific resolution and aspect-ratio scheme** (Phi-3.5-Vision: dynamic 336×336 tiling; MiniCPM-V: 448×448 with adaptive aspect ratios). Use the wrong preprocessor and accuracy collapses without erroring.\n- Mobile VLMs ship in `ggml`/llama.cpp via separate `mmproj` files (the projector + image encoder packaged separately from the LLM weights). Both files are required at load time."
+  },
+  {
+    "slug": "/edge-ai/multimodal/whisper-cpp",
+    "track": "edge-ai",
+    "module": "edge-ai/multimodal",
+    "title": "Whisper.cpp & On-Device Speech",
+    "tldr": "- **Whisper.cpp** is Georgi Gerganov's port of OpenAI Whisper to the same `ggml` runtime that powers llama.cpp. Quantized models (Q5_1 / Q8_0) hit real-time-or-better on a phone CPU; Metal / Vulkan / CUDA backends 2–4× that on a GPU.\n- The runtime exposes a tiny C API (`whisper_init_from_file`, `whisper_full`, `whisper_full_get_segment_text`) and bindings for every language. ~1 MB binary, ~244 MB for `small.en` Q5_1.\n- **Voice activity detection (VAD)** is the unsexy piece that makes streaming actually work — Silero-VAD or webrtcvad runs in under 1% CPU and detects speech-vs-silence in 30 ms windows. Without VAD, you transcribe silence and waste battery.\n- **Chunking** is the rest of the streaming story: feed Whisper 5–30 s windows with overlap, deduplicate the overlap, emit partial text as the latest chunk arrives. The Whisper.cpp `stream` example codifies the pattern.\n- The right model size: `small.en` (244 MB) for English-only on phone, `base` (74 MB) if you're memory-constrained, `medium` (~770 MB) on a laptop. `large-v3` only on a desktop GPU."
+  },
+  {
+    "slug": "/edge-ai/npu/apple-ane",
+    "track": "edge-ai",
+    "module": "edge-ai/npu",
+    "title": "Apple Neural Engine",
+    "tldr": "- The **Apple Neural Engine (ANE)** is a fixed-function NPU on every iPhone since A11 (2017) and every M-series Mac. 16-core in A17/M3+, ~38 TOPS at INT8. Lives next to the CPU and GPU on the same SoC die.\n- Apple does **not document the ANE op set publicly.** What runs on ANE is determined empirically — Core ML's compiler decides, you observe via Instruments.\n- ANE prefers: **convs, matmuls, FP16 attention, INT8 quantized weight-only, fixed-shape inputs**, and tensors with **fewer than 16K elements per dimension**. It rejects: dynamic shapes, exotic activations (gelu-fast variants), some attention layouts, large embedding tables.\n- Models compiled with `compute_units=ALL` automatically partition between ANE / GPU / CPU. Use `compute_units=CPU_AND_NE` to force \"ANE or fail\" — the right setting for benchmarking.\n- The **ANE profiler** (Xcode → Instruments → Core ML template) is the only ground truth. It shows per-op compute-unit assignment and timing. Anything else is guessing."
   },
   {
     "slug": "/edge-ai/npu/hexagon",
@@ -236,6 +278,13 @@
     "module": "edge-ai/on-device",
     "title": "llama.cpp Internals",
     "tldr": "- **llama.cpp** is a pure-C++ inference runtime (started by ggerganov, 2023). No PyTorch. No Python. ~50K lines of code; runs Llama-class models on every reasonable platform from a Raspberry Pi to a server GPU.\n- **GGUF** is the file format: weights + tokenizer + chat template + metadata in a single mmappable file. Quantized formats (Q4_K_M, Q5_K_M, Q8_0) are baked in. **The format is the standard for local LLMs in 2026** — every consumer-facing tool reads GGUF.\n- **mmap-first design**: the model file is `mmap()`'d, not read. The OS pages weights in on demand. **Cold-start to first token in seconds, not minutes**, even for a 70B model on disk.\n- **Backends compose**: a single binary runs the same model on CPU (AVX-512, NEON), Apple Metal, Vulkan, CUDA, ROCm. The framework dispatches per-tensor based on the available backend.\n- **K-quants** are the format's killer feature: better quality than naive INT4 at the same bit budget, baked into the binary, no calibration data needed. Q4_K_M is the universal default."
+  },
+  {
+    "slug": "/edge-ai/on-device/tflite",
+    "track": "edge-ai",
+    "module": "edge-ai/on-device",
+    "title": "TFLite & LiteRT",
+    "tldr": "- **TFLite** is the runtime that ships in every Android device with Google Play Services — billions of installs. As of 2024 it's been **renamed to LiteRT** (\"Lite Runtime\") and the Python/Android packages migrated to `litert` namespaces. Same code, new branding; existing TFLite code still works.\n- The runtime is tiny (~1 MB binary), reads `.tflite` flatbuffer files, and exposes a uniform Tensor I/O API across **C++, Java/Kotlin, Swift, Python, and JS**.\n- Performance comes from **delegates** — pluggable backends that move ops off the CPU. The four that matter: **XNNPACK** (CPU SIMD), **GPU delegate** (OpenCL/OpenGL/Metal), **NNAPI** (Android's NPU/DSP routing layer), **Hexagon delegate** (Qualcomm direct).\n- Quantization is the same INT8 / INT4 story as elsewhere; the TFLite-specific bit is **representative-dataset post-training quantization** (PTQ-PCM) and the on-device-friendly **selective op fallback** when a delegate doesn't support an op.\n- Use TFLite/LiteRT when: you're shipping to Android, you want NNAPI's automatic NPU routing, your model is a CNN/Transformer that fits ONNX-style ops cleanly. Use llama.cpp instead for chat-style LLMs (the GGUF + KV-cache stack is purpose-built for that)."
   },
   {
     "slug": "/foundations/caches-and-architecture/branch-prediction",

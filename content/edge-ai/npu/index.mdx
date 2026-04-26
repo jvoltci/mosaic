@@ -5,12 +5,26 @@ last_reviewed: 2026-04-26
 ---
 # NPU Stacks
 
-NPUs (Neural Processing Units) live alongside the CPU and GPU on every modern phone SoC. Each vendor ships its own programming model — Apple ANE via Core ML (covered in [On-Device Runtimes](../on-device)), Qualcomm Hexagon via QNN, MediaTek Genio, AMD XDNA. This module covers the Qualcomm side; Apple's is in [Core ML & ANE](../on-device/coreml).
+NPUs (Neural Processing Units) live alongside the CPU and GPU on every modern phone SoC. Each vendor ships its own programming model — **Qualcomm Hexagon** via QNN (Snapdragon phones, robots, drones), **Apple Neural Engine** via Core ML (every iPhone since 2017), MediaTek APU, AMD XDNA, ARM Ethos. This module covers the two stacks that ship the most production inference today: Hexagon and ANE.
 
 <ModuleProgress
   lessons={[
     { slug: '/edge-ai/npu/hexagon', title: 'Qualcomm Hexagon', estMin: 14 },
+    { slug: '/edge-ai/npu/apple-ane', title: 'Apple Neural Engine', estMin: 16 },
   ]}
 />
 
-> Lesson coming: AMD XDNA · MediaTek Genio · ARM Ethos
+<Capstone
+  title="Profile a model on Hexagon AND ANE — and read the differences"
+  pitch="Same model, two NPUs, two profiler tools. The artifact is the side-by-side trace that explains why an op runs at 100 GOPS on one chip and 5 GOPS on the other."
+  what="Take a small CNN (MobileNetV3) or a tiny transformer (Phi-3.5-mini-128k). Convert to QNN (Hexagon) and Core ML (ANE). Profile each on real hardware: QNN's `qnn-profile-viewer` for Hexagon, Xcode Instruments → Core ML for ANE. Identify three ops that run faster on one NPU than the other; explain why."
+  sota={['QNN SDK 2.20+', 'Core ML 7+ / coremltools 7.2+', 'Snapdragon 8 Gen 3 device + Xcode 15+ for ANE', 'MobileNetV3 or Phi-3.5-mini reference']}
+  device="phone"
+  time="One focused weekend (~12 h)"
+  level="advanced"
+  outcomes={[
+    'A side-by-side NPU trace report — the kind of artifact mobile-ML interviewers ask for by name',
+    'Felt knowledge of how Hexagon HVX vectors and ANE matrix tiles differ in practice',
+    'A reusable conversion + profiling pipeline you can re-run on any new mobile model',
+  ]}
+/>

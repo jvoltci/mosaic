@@ -1,0 +1,208 @@
+---
+title: TFLite & LiteRT
+description: Android's standard ML runtime — TFLite (now LiteRT), XNNPACK, NNAPI, GPU/Hexagon delegates, and the production patterns behind the on-device features in Google Pixel and Samsung Galaxy.
+last_reviewed: 2026-04-26
+---
+# TFLite & LiteRT
+
+## TL;DR
+
+- **TFLite** is the runtime that ships in every Android device with Google Play Services — billions of installs. As of 2024 it's been **renamed to LiteRT** ("Lite Runtime") and the Python/Android packages migrated to `litert` namespaces. Same code, new branding; existing TFLite code still works.
+- The runtime is tiny (~1 MB binary), reads `.tflite` flatbuffer files, and exposes a uniform Tensor I/O API across **C++, Java/Kotlin, Swift, Python, and JS**.
+- Performance comes from **delegates** — pluggable backends that move ops off the CPU. The four that matter: **XNNPACK** (CPU SIMD), **GPU delegate** (OpenCL/OpenGL/Metal), **NNAPI** (Android's NPU/DSP routing layer), **Hexagon delegate** (Qualcomm direct).
+- Quantization is the same INT8 / INT4 story as elsewhere; the TFLite-specific bit is **representative-dataset post-training quantization** (PTQ-PCM) and the on-device-friendly **selective op fallback** when a delegate doesn't support an op.
+- Use TFLite/LiteRT when: you're shipping to Android, you want NNAPI's automatic NPU routing, your model is a CNN/Transformer that fits ONNX-style ops cleanly. Use llama.cpp instead for chat-style LLMs (the GGUF + KV-cache stack is purpose-built for that).
+
+## Why this matters
+
+ExecuTorch and Core ML get the LLM-on-phone press. **TFLite/LiteRT ships the actual production AI in your phone right now.** Live captions, on-device translation, smart compose, the Pixel Camera's Night Sight neural processing, the Galaxy AI features that don't talk to a cloud — all running through TFLite delegates routing to the device's NPU.
+
+Three reasons to know it cold:
+
+1. **Android coverage**: NNAPI can route to *every* Android NPU automatically (Hexagon, Mali, MediaTek APU, Samsung NPU) without per-vendor code. Nothing else does this.
+2. **The non-LLM 90%**: most production mobile ML is still CNN-shaped — ASR, OCR, image classification, on-device translation, super-resolution. TFLite is the right runtime for that whole class of models.
+3. **Maturity**: ten years of production hardening. Predictable failure modes, well-known op-coverage tables, the Android ML team actively ships fixes.
+
+The 2024 LiteRT rebrand signals Google's intent to keep investing — the new name comes with first-class JAX support and a cleaner `litert.aot` ahead-of-time compile path.
+
+## Mental model
+
+```mermaid
+flowchart LR
+  src[TF / Keras / JAX / PyTorch model] --> conv[TFLite/LiteRT converter]
+  conv --> file[".tflite flatbuffer"]
+  file --> rt[LiteRT runtime]
+  rt --> dispatcher{Op dispatcher}
+  dispatcher --> xnn[XNNPACK delegate (CPU)]
+  dispatcher --> gpu[GPU delegate]
+  dispatcher --> nnapi[NNAPI delegate]
+  dispatcher --> hex[Hexagon delegate]
+  nnapi --> npu1[Samsung NPU]
+  nnapi --> npu2[MediaTek APU]
+  nnapi --> npu3[Mali GPU]
+  nnapi --> npu4[Hexagon DSP]
+```
+
+The flatbuffer file is the artifact — frozen graph + quantization metadata. The runtime walks it op by op, asks each delegate "can you handle this?", and falls back to the next delegate (down to plain CPU) for any op no delegate accepts. That selective fallback is why TFLite ships everywhere: an op the new NPU doesn't support runs on CPU instead of crashing the model.
+
+## Concrete walkthrough
+
+### Converting a model to .tflite
+
+```python
+import tensorflow as tf
+
+# Convert a Keras / TF SavedModel
+converter = tf.lite.TFLiteConverter.from_saved_model("my_model/")
+converter.optimizations = [tf.lite.Optimize.DEFAULT]   # int8 PTQ
+converter.representative_dataset = lambda: gen()       # 100–500 calibration samples
+converter.target_spec.supported_ops = [
+    tf.lite.OpsSet.TFLITE_BUILTINS_INT8,               # require int8 everywhere
+]
+converter.inference_input_type = tf.int8
+converter.inference_output_type = tf.int8
+
+tflite_bytes = converter.convert()
+open("my_model.tflite", "wb").write(tflite_bytes)
+```
+
+The `representative_dataset` is the killer feature. PTQ needs to see real input distributions to pick activation ranges; pass 100–500 samples drawn from your real data and the converter calibrates per-tensor scales. Skip it and you get default ranges that often clip badly.
+
+### Loading on Android (Kotlin)
+
+```kotlin
+// build.gradle: implementation("com.google.ai.edge.litert:litert:1.0.1")
+val options = Interpreter.Options().apply {
+    addDelegate(GpuDelegate())                         // try GPU first
+    addDelegate(NnApiDelegate())                       // then NPU via NNAPI
+    setNumThreads(4)                                   // CPU fallback
+}
+val interpreter = Interpreter(loadModelFile("my_model.tflite"), options)
+
+val inputBuffer = ByteBuffer.allocateDirect(...)
+val outputBuffer = ByteBuffer.allocateDirect(...)
+interpreter.run(inputBuffer, outputBuffer)
+```
+
+The delegate ordering matters — the runtime asks each delegate in order. GPU delegate first means GPU-friendly ops (matmul, conv) run on GPU; NNAPI catches the rest if the device has a compatible NPU; CPU is the safety net.
+
+### What XNNPACK actually does
+
+XNNPACK is the default CPU delegate for TFLite — and it's the reason "the CPU path" isn't slow. It ships hand-written ARM NEON / x86 AVX kernels for every op and chooses at startup based on `cpuid`. On a Pixel 8 (Cortex-A715), XNNPACK is roughly **2–3× faster than naive C++** for the same op.
+
+Critically, XNNPACK supports **dynamic shape** ops that NNAPI / GPU delegate often refuse. So XNNPACK is what catches the long tail: the embedding lookup, the layer norm with non-power-of-2 hidden dim, the custom activation. XNNPACK is what makes the rest of the system shippable.
+
+### NNAPI: the routing layer
+
+NNAPI is Android's neural-network HAL. The *vendor* writes a NNAPI driver that exposes their NPU's capabilities; the *runtime* (TFLite via the NnApiDelegate) decides at load time which subgraph each NPU can run.
+
+This is huge: you don't need vendor-specific code paths in your app. The same `.tflite` file routes to:
+
+- Samsung NPU on Galaxy S24
+- MediaTek APU on Dimensity SoCs
+- Hexagon DSP on Snapdragon
+- Mali GPU on older Pixels (no NPU)
+- Just CPU on devices with broken NNAPI drivers
+
+Not free though: NNAPI op coverage varies by vendor. Some OEMs ship buggy NNAPI drivers (Samsung's Galaxy S20 era was infamous). The pragmatic pattern: **enable NNAPI behind a runtime switch**. If NNAPI fails (op not supported, driver bug), fall back to GPU then CPU.
+
+### Hexagon delegate: bypass NNAPI for Snapdragon
+
+For Snapdragon-only deployment (a lot of robotics / embedded use cases), the **Hexagon delegate** is faster than NNAPI because it speaks directly to QNN/cDSP without the HAL middleware. Use this when you're shipping a fixed-hardware device and you know it's Snapdragon — for general Android apps stick with NNAPI.
+
+### TFLite vs. ExecuTorch — when to pick which
+
+| If… | Use |
+|---|---|
+| You're starting from a TF/Keras/JAX model | TFLite (no conversion friction) |
+| You're starting from a PyTorch model + need maximum mobile perf | ExecuTorch (shorter PyTorch → mobile path) |
+| You want NNAPI to route to *every* Android NPU automatically | TFLite (NNAPI is its native delegate; ExecuTorch's vendor backends are explicit) |
+| Your model is a chat-style LLM | Neither — use llama.cpp or MLC |
+| Your model is a CNN/CV/ASR pipeline | TFLite (mature op coverage; XNNPACK is excellent) |
+| You're shipping to robots/drones with fixed Snapdragon | TFLite + Hexagon delegate (or QNN direct) |
+
+### The LiteRT-specific 2024 changes
+
+- Package rename: `tflite_runtime` → `ai-edge-litert` (Python), `org.tensorflow:tensorflow-lite` → `com.google.ai.edge.litert` (Android).
+- **JAX support**: convert directly from JAX without going through TF first.
+- **`litert.aot`**: ahead-of-time compile a `.tflite` to a target's native binary, skipping the runtime dispatcher overhead. Useful for very-low-latency embedded targets.
+- API is otherwise identical — old TFLite code runs unchanged.
+
+## Run it in your browser
+
+A useful demo: simulate the delegate-fallback decision tree TFLite walks for each op. This is the heart of why TFLite "just works" across so many devices.
+
+<RunInBrowser
+  description="Simulate TFLite's per-op delegate dispatch. Notice how the unsupported op silently falls through CPU instead of failing the whole graph."
+  code={`# Simulate TFLite's selective-fallback dispatch.
+ops = [
+    ("Conv2D",        "conv_1"),
+    ("BatchNorm",     "bn_1"),
+    ("Relu",          "relu_1"),
+    ("Conv2D",        "conv_2"),
+    ("LayerNorm",     "ln_1"),       # NPU often doesn't support this
+    ("CustomActivation", "swish_1"), # XNNPACK might
+    ("MatMul",        "fc_1"),
+    ("Softmax",       "softmax_1"),
+]
+
+# Each delegate's op-coverage table (real-ish numbers for an NNAPI driver)
+nnapi   = {"Conv2D", "BatchNorm", "Relu", "MatMul", "Softmax"}
+gpu     = {"Conv2D", "BatchNorm", "Relu", "MatMul", "Softmax", "LayerNorm"}
+xnnpack = {"Conv2D", "BatchNorm", "Relu", "MatMul", "Softmax", "LayerNorm",
+           "CustomActivation"}
+# CPU is the safety net — supports everything.
+
+print(f"{'op':<22} {'name':<14} -> delegate")
+print("-" * 56)
+for op, name in ops:
+    if op in nnapi:        delegate = "NNAPI (NPU)"
+    elif op in gpu:        delegate = "GPU"
+    elif op in xnnpack:    delegate = "XNNPACK (CPU SIMD)"
+    else:                  delegate = "CPU (plain)"
+    print(f"{op:<22} {name:<14} -> {delegate}")
+
+print("\\n→ The whole graph runs end-to-end. No op blocks the model.")
+`}
+/>
+
+The selective-fallback model is what makes TFLite *actually ship* in production. ExecuTorch has the same pattern but you have to wire each backend explicitly; TFLite gets it for free.
+
+## Quick check
+
+<Quiz
+  question="You ship a TFLite model with the NNAPI delegate enabled. Reports come in: the model crashes on Galaxy S20 and Galaxy S21, but works fine on Galaxy S22+ and on every Pixel. What's the likely cause and the right mitigation?"
+  options={[
+    "The model uses a quantization scheme S20/S21 don't support; re-quantize for the older devices.",
+    "Samsung's NNAPI driver had a known regression in the S20/S21 era; gate the NNAPI delegate behind a device-list allowlist or fall back to GPU/CPU if the first inference call throws.",
+    "The model's flatbuffer is too large for the S20/S21 NPU memory; shard the model into two .tflite files.",
+    "NNAPI was deprecated in Android 13 and removed on those devices; use the GPU delegate instead.",
+  ]}
+  answer={1}
+  explanation="Samsung's NNAPI HAL drivers in the S20/S21 era were genuinely buggy — Google's TFLite team published an internal allowlist and the production pattern was to wrap the NNAPI delegate construction in a try/catch and fall back to GPU then CPU if the model crashed on first inference. NNAPI is still very much supported (option d is wrong); the issue is vendor implementation quality, not the API itself. This is the single biggest TFLite production gotcha."
+/>
+
+## Key takeaways
+
+1. **TFLite (now LiteRT)** is Android's standard ML runtime — billions of devices, the actual production path for non-LLM mobile AI.
+2. **Delegates** are the perf story: XNNPACK (CPU), GPU delegate, NNAPI (auto-route to any Android NPU), Hexagon delegate (Snapdragon direct).
+3. **NNAPI** is the secret weapon — one binary routes to every vendor's NPU. Vendor-quality varies; gate behind try/fallback.
+4. **Selective op fallback** means a graph never fails because of one unsupported op — the runtime degrades gracefully to CPU.
+5. **XNNPACK** is the reason the CPU path is fast — hand-tuned ARM/x86 SIMD kernels, 2–3× over naive C++.
+6. **For LLMs use llama.cpp or MLC.** TFLite is the right call for CNN/CV/ASR models.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'docs', href: 'https://ai.google.dev/edge/litert', title: 'LiteRT Documentation', author: 'Google AI Edge', note: 'The current canonical docs (post-2024 rebrand). Start here.' },
+    { kind: 'docs', href: 'https://ai.google.dev/edge/litert/performance/delegates', title: 'LiteRT Delegates Guide', author: 'Google AI Edge', note: 'XNNPACK / GPU / NNAPI / Hexagon side-by-side.' },
+    { kind: 'docs', href: 'https://developer.android.com/ndk/guides/neuralnetworks', title: 'Android NNAPI Guide', author: 'Android Developers', note: 'The HAL contract every Android NPU driver implements. Worth skimming so you understand what TFLite is calling.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2010.08678', title: 'TensorFlow Lite Micro: Embedded ML on Constrained Hardware', author: 'David et al., 2020', note: 'The TFLite-Micro paper — the embedded sibling. Shows the runtime\'s minimum-footprint path for $5 microcontrollers.' },
+    { kind: 'repo', href: 'https://github.com/google/XNNPACK', title: 'google/XNNPACK', author: 'Google', note: 'The CPU-SIMD kernel library. Read `src/qs8-gemm/` for hand-written INT8 kernel families.' },
+    { kind: 'blog', href: 'https://blog.tensorflow.org/2024/01/google-introduces-litert.html', title: 'Introducing LiteRT', author: 'Google', note: 'The 2024 rebrand announcement; what changed and why.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=QSbAUxWfxQw', title: 'TFLite Internals: From Flatbuffer to Token', author: 'TF Dev Summit 2023', note: 'Walks the runtime\'s dispatch loop op by op — useful if you\'re debugging a delegate fallback.' },
+  ]}
+/>
+
+<LessonComplete />
