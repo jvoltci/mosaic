@@ -17,11 +17,60 @@ A frontier training run is a 4D or 5D parallelism mesh: data × tensor × pipeli
 />
 
 <Capstone
-  title="Shard a 1.3B model across 4 GPUs with FSDP2 — and watch the network"
-  pitch="Open the profiler, point at the bandwidth bar that's eating your throughput, fix it."
-  what="Train a 1.3B-param GPT across 4 A100s with PyTorch FSDP2. Use torch.profiler to capture an end-to-end trace. Identify the AllGather and ReduceScatter ops on the timeline. Tune `cpu_offload`, `mixed_precision`, and bucket size. Plot scaling efficiency 1 → 4 GPUs. Beat 70% efficiency."
-  sota={['PyTorch FSDP2 (DTensor)', 'torch.profiler', 'NCCL', 'Modal or Lambda Labs (~$5)', 'TorchTitan reference config']}
+  title="Shard a 1.3B GPT across 2 GPUs with FSDP2 — and beat 70% efficiency"
+  pitch="Open the profiler, point at the bandwidth bar that's eating your throughput, fix it. Two rented GPUs, one weekend, one trace."
+  what="Train a 1.3B-param GPT across 2 A100s (or 2 H100s) with PyTorch FSDP2. Use torch.profiler to capture an end-to-end trace. Identify the AllGather and ReduceScatter ops on the timeline. Tune `mixed_precision`, `reshard_after_forward`, and bucket / activation-checkpointing settings. Plot scaling efficiency 1 → 2 GPUs. Beat 70%."
+  sota={['PyTorch 2.5+ FSDP2 (DTensor)', 'torch.profiler + Perfetto', 'NCCL', 'Modal or Lambda Labs (~$3–5 of GPU time)', 'TorchTitan reference config', 'nanoGPT (1.3B variant)']}
   device="cloud"
-  time="One weekend"
+  time="One weekend (~10 h)"
   level="advanced"
+  steps={[
+    {
+      title: 'Stand up a 2-GPU box on Modal or Lambda',
+      goal: 'Spin up an instance with 2× A100-40GB (Lambda on-demand or a Modal sandbox). SSH in. Verify `nvidia-smi` shows two GPUs and `torch.cuda.device_count() == 2`. Save a `Makefile` so you can rebuild the env in one command.',
+      checkpoint: '`nvidia-smi` shows two GPUs at <5% util at idle. NCCL banner appears when you `python -c "import torch.distributed as d; d.init_process_group(\'nccl\')"` under torchrun.',
+      trap: 'On Lambda the two GPUs may not have NVLink (some on-demand instances are PCIe-only). NVLink ≈ 600 GB/s, PCIe-4 ≈ 32 GB/s — the FSDP collective hot path moves at PCIe speed and your ceiling drops. Check `nvidia-smi topo -m`. If you see PIX/SYS instead of NV2/NV4, expect 30–40% efficiency, not 70%; pick a Modal SXM4 instance instead.',
+      est: '45 min',
+    },
+    {
+      title: 'Single-GPU baseline — measure tokens/sec/GPU',
+      goal: 'Take nanoGPT-1.3B (or any 1.3B GPT config — 24 layers, 16 heads, d=2048). Train on 1 GPU with bf16 and a sequence length of 2048. Record steady-state tokens/sec. This is the denominator for efficiency.',
+      checkpoint: 'Stable tok/s number, e.g. ~3.5K tok/s on A100-40GB. No OOM at batch 4.',
+      trap: 'Running with `torch.compile` on the baseline but not on FSDP (or vice versa) makes the comparison meaningless. Decide upfront — both compiled or both eager — and stick to it.',
+      est: '60 min',
+    },
+    {
+      title: 'Wrap the model in FSDP2 — the right way',
+      goal: 'Replace `nn.Module` parent setup with `fully_shard()` from `torch.distributed._composable.fsdp`. Wrap each transformer block individually (per-block sharding, the FSDP2 idiom) plus the embedding layer separately. Use `MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.float32)`.',
+      checkpoint: '`torchrun --nproc_per_node=2 train.py` runs without error; both GPUs show ~100% util during forward+backward; loss curve matches single-GPU baseline within noise for the first 100 steps.',
+      trap: 'FSDP2 is *not* `FullyShardedDataParallel` (FSDP1 — the old class). The new API is `fully_shard()`, called per-module, no class wrap. If you find yourself writing `auto_wrap_policy`, you\'re on the legacy API. The 2024 PyTorch docs still mostly show FSDP1; use the FSDP2 examples in TorchTitan as the reference.',
+      est: '120 min',
+    },
+    {
+      title: 'Capture a profiler trace — find the bandwidth bar',
+      goal: '`torch.profiler.profile(activities=[CPU, CUDA], schedule=...).export_chrome_trace("trace.json")` for 5 steady-state iterations. Open in Perfetto. Find the AllGather (forward/backward param fetch) and ReduceScatter (gradient sync) bars on the NCCL stream. Note their wall-clock cost vs. compute kernels.',
+      checkpoint: 'Trace screenshot annotated with: (a) the AllGather before each block\'s forward, (b) the ReduceScatter after each block\'s backward, (c) the % of step time that is collectives vs. compute.',
+      trap: 'Without `record_shapes=True` and `with_stack=True`, you can\'t tell which AllGather is for which layer. With them, the trace file balloons to 100 MB+. Profile *one* step in detail; profile 5 for the timing numbers.',
+      est: '90 min',
+    },
+    {
+      title: 'Tune for the 70% efficiency target',
+      goal: 'Move the dials that matter for 2-GPU FSDP2: enable `reshard_after_forward=True` only on big blocks, use `forward_prefetch=True`, turn on activation checkpointing, raise per-GPU batch (the kingpin of compute/comm overlap). Re-run, re-measure tok/s/GPU.',
+      checkpoint: 'tok/s with 2 GPUs / (tok/s with 1 GPU × 2) ≥ 0.70. Document which knob bought you each percentage point.',
+      trap: 'Activation checkpointing trades compute for memory; if you over-apply it, comm overlap improves but compute time grows and net throughput drops. The plot showing efficiency vs. activation-checkpoint coverage is the most useful artifact in this whole capstone.',
+      est: '120 min',
+    },
+    {
+      title: 'Repo + write-up',
+      goal: 'GitHub repo with: `train.py`, `bench.py`, the annotated Perfetto screenshot, and a 1-page `README.md` showing the efficiency table (1 GPU, 2 GPU eager, 2 GPU + each tuning step). Push.',
+      checkpoint: 'A reader can clone, run `make`, get the same numbers within 5%, and explain each row of your efficiency table.',
+      est: '60 min',
+    },
+  ]}
+  outcomes={[
+    'A working FSDP2 setup at the modern PyTorch idiom (`fully_shard`, not the legacy class) — directly applicable to TorchTitan-style frontier-scale runs',
+    'Felt knowledge of when AllGather/ReduceScatter dominate the step and which knobs change that',
+    'A profiler workflow (capture → Perfetto → annotate → write up) you can re-use for any distributed run',
+    'A repo + plot that documents 70%+ scaling — an unambiguous portfolio piece for ML-systems roles',
+  ]}
 />
