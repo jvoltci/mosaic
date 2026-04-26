@@ -10,6 +10,7 @@ import { Mermaid } from './components/Mermaid'
 import { Capstone } from './components/Capstone'
 import { FillIn } from './components/FillIn'
 import { CostCalc } from './components/CostCalc'
+import { FavoritesView } from './components/FavoritesView'
 
 const docsComponents = getDocsMDXComponents()
 
@@ -27,5 +28,6 @@ export const useMDXComponents = (components?: Record<string, React.ComponentType
   Capstone,
   FillIn,
   CostCalc,
+  FavoritesView,
   ...components,
 })

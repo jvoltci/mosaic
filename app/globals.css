@@ -3436,3 +3436,175 @@ h2.m-focus-h2.is-active {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* ============================================================
+   Favorite (★) button — sits in the lesson breadcrumb
+   ============================================================ */
+.m-fav-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.7rem;
+  border: 1px solid var(--m-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--m-fg-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.m-fav-btn span[aria-hidden] { font-size: 0.95rem; line-height: 1; }
+.m-fav-btn:hover { color: var(--m-fg); border-color: color-mix(in srgb, var(--m-fg) 25%, transparent); }
+.m-fav-btn.is-on {
+  color: var(--m-amber, #f2cc8f);
+  border-color: color-mix(in srgb, var(--m-amber, #f2cc8f) 50%, transparent);
+  background: color-mix(in srgb, var(--m-amber, #f2cc8f) 8%, transparent);
+}
+@media (max-width: 640px) {
+  .m-fav-btn { margin-left: 0; }
+  .m-fav-btn-label { display: none; }
+}
+@media (hover: none) and (pointer: coarse) {
+  .m-fav-btn { min-height: 36px; padding: 0.45rem 0.8rem; }
+}
+
+/* ============================================================
+   /favorites page
+   ============================================================ */
+.m-favs { margin-top: 1.5rem; }
+.m-favs-count {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 0.82rem;
+  color: var(--m-fg-dim);
+  margin: 0 0 1.5rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.m-favs-track { margin: 0 0 2.5rem; }
+.m-favs-track-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.7rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--m-border);
+}
+.m-favs-track-title a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.m-favs-track-title a:hover { text-decoration: underline; }
+.m-favs-track-num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--m-fg-dim);
+  font-weight: 400;
+  font-feature-settings: 'tnum';
+}
+.m-favs-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.m-favs-item {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+  border: 1px solid var(--m-border);
+  border-radius: 0.6rem;
+  background: var(--m-bg-soft);
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+.m-favs-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--m-border));
+}
+.m-favs-link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.9rem;
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+.m-favs-link-title {
+  color: var(--m-fg);
+  font-weight: 600;
+  font-size: 0.98rem;
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.005em;
+}
+.m-favs-link-summary {
+  color: var(--m-fg-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.m-favs-remove {
+  align-self: stretch;
+  flex: 0 0 auto;
+  padding: 0 0.85rem;
+  border: none;
+  border-left: 1px solid var(--m-border);
+  background: transparent;
+  color: var(--m-fg-dim);
+  cursor: pointer;
+  font-size: 0.95rem;
+  border-radius: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.m-favs-remove:hover {
+  color: var(--m-fg);
+  background: color-mix(in srgb, var(--m-fg) 5%, transparent);
+}
+
+/* Empty state */
+.m-favs-empty {
+  margin-top: 2rem;
+  padding: 2.4rem 1.6rem;
+  border: 1px dashed var(--m-border);
+  border-radius: 0.85rem;
+  background: var(--m-bg-soft);
+  text-align: center;
+}
+.m-favs-empty-title {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--m-fg);
+}
+.m-favs-empty-sub {
+  margin: 0 0 1.4rem;
+  color: var(--m-fg-muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  max-width: 32rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+.m-favs-empty-cta {
+  display: inline-block;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid var(--m-border);
+  border-radius: 0.5rem;
+  color: var(--m-fg);
+  text-decoration: none;
+  font-size: 0.92rem;
+  background: var(--m-bg);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.m-favs-empty-cta:hover {
+  border-color: color-mix(in srgb, var(--m-fg) 25%, transparent);
+  background: color-mix(in srgb, var(--m-fg) 4%, transparent);
+}

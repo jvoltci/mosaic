@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { TILES, TRACK_ACCENT, TRACK_NUM, TRACK_LABELS, type Tile } from '../../lib/mosaic-tiles'
 import { FocusScroll } from './FocusScroll'
+import { FavoriteButton } from '../FavoriteButton'
 
 type Props = {
   pathname: string
@@ -36,6 +37,7 @@ export function LessonChrome({ pathname, children }: Props) {
         <span className="m-lesson-bc-position">
           Lesson {idx + 1} of {moduleTiles.length}
         </span>
+        <FavoriteButton />
       </nav>
 
       <div className="m-lesson-body m-prose">
