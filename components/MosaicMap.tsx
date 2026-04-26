@@ -59,6 +59,7 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
       'llm-architecture': { total: 0, done: 0 },
       compilers: { total: 0, done: 0 },
       applied: { total: 0, done: 0 },
+      'edge-ai': { total: 0, done: 0 },
     }
     for (const t of TILES) {
       byTrack[t.track].total += 1

@@ -24,6 +24,7 @@
   --m-track-architecture: var(--m-gold);
   --m-track-compilers: var(--m-indigo);
   --m-track-applied: #4a9b8e;
+  --m-track-edge-ai: #7ba05b;
 
   --m-nav-h: 56px;
   --m-content-max: 44rem;
@@ -49,6 +50,7 @@ html.light {
   --m-track-architecture: #b8902f;
   --m-track-compilers: #3d6ba8;
   --m-track-applied: #2f7d72;
+  --m-track-edge-ai: #4f7338;
 
   color-scheme: light;
 }

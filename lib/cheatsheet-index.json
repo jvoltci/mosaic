@@ -140,6 +140,48 @@
     "tldr": "- `torch.compile(model)` swaps PyTorch's eager execution for **graph capture (Dynamo) + autograd compilation (AOTAutograd) + kernel codegen (Inductor)**.\n- **Dynamo** captures Python-level graphs by hooking into bytecode evaluation, falling back gracefully when it can't trace.\n- **AOTAutograd** lifts the Python autograd into a static forward+backward joint graph that the compiler can optimize together.\n- **Inductor** lowers the graph to **Triton kernels** for GPU and **C++ + OpenMP** for CPU. Fuses pointwise ops aggressively.\n- **Real-world wins:** **1.3–2× speedup on training**, **1.5–4× on inference**, mostly from kernel fusion and CUDA Graph capture. The default in PyTorch 2.5+."
   },
   {
+    "slug": "/edge-ai/distillation/small-llms",
+    "track": "edge-ai",
+    "module": "edge-ai/distillation",
+    "title": "Small LLMs & Distillation",
+    "tldr": "- **Small LLMs (≤4B params)** are not just \"shrunk frontier models\" — they're produced via deliberate recipes that maximize signal per parameter. The 2024–2026 standard: train longer, distill from a frontier teacher, post-train carefully.\n- **Distillation** = train a small \"student\" to match a larger \"teacher's\" outputs (logits, hidden states, or chosen-vs-rejected preferences). Most modern small LLMs are distilled from a same-family large model — DeepSeek-V3-distill, Llama-3.3-distill, etc.\n- **Long pretraining matters more than data quality**: MiniCPM-3 (2.4B) trained on 5T tokens beats some 7B models trained on 1.5T. The \"scaling laws say small needs less\" intuition is wrong for small-but-deep training.\n- **Post-training is the gap closer**: SFT + DPO (or GRPO) with carefully-curated chat data closes most of the small-vs-large gap on the workloads people actually care about.\n- **TinyLlama (1.1B), MiniCPM-3 (2.4B), Qwen2.5-1.5B/3B, Phi-3.5-mini, Llama-3.2-1B/3B** are the 2026 reference small models. Each represents a slightly different recipe; understanding them is understanding the edge-LLM design space."
+  },
+  {
+    "slug": "/edge-ai/edge-quant/gguf-and-imatrix",
+    "track": "edge-ai",
+    "module": "edge-ai/edge-quant",
+    "title": "GGUF & i-matrix",
+    "tldr": "- **GGUF** carries quantized weights *plus* the recipe that quantized them. The K-quant variants (Q4_K_M, Q5_K_M, etc.) are baked into the format spec.\n- **K-quants store per-super-block (256 weights) statistics** plus per-sub-block (16/32 weights) refinements. More precision than naive INT4, no calibration data needed for \"OK\" results.\n- **The i-matrix (importance matrix)** is a calibration-driven addition. Compute activation statistics on a calibration dataset; weight the quantization-error metric *by importance* per channel; feed back into the K-quant chooser. **Bumps quality of Q4_K_M / Q3_K from \"OK\" to \"indistinguishable from FP16.\"**\n- The i-matrix is **optional but essentially free** to compute (~5 minutes on a calibration set). Most modern GGUF releases on Hugging Face ship i-matrix-quantized variants.\n- Reading per-quant size and quality numbers fluently — Q4_K_M ≈ 4.5 bits, Q5_K_M ≈ 5.5, Q6_K ≈ 6.6, Q8_0 ≈ 8.5 — is the price of admission for any local-LLM conversation in 2026."
+  },
+  {
+    "slug": "/edge-ai/npu/hexagon",
+    "track": "edge-ai",
+    "module": "edge-ai/npu",
+    "title": "Qualcomm Hexagon",
+    "tldr": "- **Hexagon** is Qualcomm's DSP / NPU lineage. Every Snapdragon (and many Qualcomm IoT chips) ships with a Hexagon Tensor Processor (HTP). On Snapdragon 8 Gen 3 / 8 Gen 4: ~45 TOPS at INT8.\n- The programming model is **QNN — Qualcomm Neural Network SDK**. Models lower to a Hexagon-specific binary (`.bin`) executed by the QNN runtime on Android.\n- **INT8 is the bread and butter; INT4 is supported on the latest generations.** FP16 works but is generally slower than INT8 on this NPU. Quantization-aware training (QAT) is more important here than on Apple silicon.\n- Frameworks plug in as **delegates**: ExecuTorch ships a Hexagon delegate; ONNX Runtime + QNN execution provider is widely used; TFLite has Hexagon support since 2019.\n- Snapdragon-shipped phones cover ~80% of high-end Android in 2026. Knowing Hexagon is the price of \"ship LLMs to Android\" outside the iPhone bubble."
+  },
+  {
+    "slug": "/edge-ai/on-device/coreml",
+    "track": "edge-ai",
+    "module": "edge-ai/on-device",
+    "title": "Core ML & ANE",
+    "tldr": "- **Core ML** is Apple's on-device ML framework. Models are `.mlpackage` (the modern format, replaces `.mlmodel`). Run on CPU, GPU (via Metal), or **Apple Neural Engine** (ANE) — Apple's NPU. The framework dispatches per-op based on what the chosen compute unit can do.\n- The **Apple Neural Engine** is the silicon that Apple's iOS Intelligence runs on. ~38 TOPS on A17/M3, ~100+ TOPS on M4. Privacy-preserving (on-device, never the cloud). **Heavily optimized for transformer inference** in M3/M4 generation.\n- **`coremltools`** is the conversion toolkit: PyTorch / TensorFlow / ONNX → `.mlpackage`. The 2024+ version supports `torch.export`-shaped graphs and palettized (LUT-quantized) weights.\n- **MLX** is Apple's research-grade framework — like PyTorch but Apple-native, lazy-evaluated, runs on Apple silicon's unified memory. Used for training and prototyping; deploy via Core ML for production.\n- For 2026 iOS apps: Core ML is the path when you need ANE; ExecuTorch (with Core ML delegate) is the path when authoring fluency wins; llama.cpp is the path when binary size and ANE-independence matter."
+  },
+  {
+    "slug": "/edge-ai/on-device/executorch",
+    "track": "edge-ai",
+    "module": "edge-ai/on-device",
+    "title": "ExecuTorch",
+    "tldr": "- **ExecuTorch** is PyTorch's mobile runtime — the answer to \"I have a PyTorch model, how do I run it on iOS / Android with no Python?\"\n- The pipeline: `torch.export()` → **EXIR** (Edge IR) → quantize via PT2E → partition to backends (XNNPACK CPU, Core ML ANE, Vulkan GPU, Hexagon NPU) → serialize as `.pte`.\n- The `.pte` file is **everything** the device needs: serialized graph + per-backend kernels + weights. Few-hundred-KB runtime + your model size = total app footprint.\n- **Vendor backends plug in as MLIR-shaped delegates** — Apple ships a Core ML delegate, Qualcomm ships a Hexagon delegate, MediaTek ships a Genio delegate. The partitioner decides which subgraph runs where.\n- For 2026 production: ExecuTorch is the **default for PyTorch → mobile** at Meta and many OEM partners (Samsung, Asus). It's where new mobile-AI work in the PyTorch ecosystem starts."
+  },
+  {
+    "slug": "/edge-ai/on-device/llama-cpp-internals",
+    "track": "edge-ai",
+    "module": "edge-ai/on-device",
+    "title": "llama.cpp Internals",
+    "tldr": "- **llama.cpp** is a pure-C++ inference runtime (started by ggerganov, 2023). No PyTorch. No Python. ~50K lines of code; runs Llama-class models on every reasonable platform from a Raspberry Pi to a server GPU.\n- **GGUF** is the file format: weights + tokenizer + chat template + metadata in a single mmappable file. Quantized formats (Q4_K_M, Q5_K_M, Q8_0) are baked in. **The format is the standard for local LLMs in 2026** — every consumer-facing tool reads GGUF.\n- **mmap-first design**: the model file is `mmap()`'d, not read. The OS pages weights in on demand. **Cold-start to first token in seconds, not minutes**, even for a 70B model on disk.\n- **Backends compose**: a single binary runs the same model on CPU (AVX-512, NEON), Apple Metal, Vulkan, CUDA, ROCm. The framework dispatches per-tensor based on the available backend.\n- **K-quants** are the format's killer feature: better quality than naive INT4 at the same bit budget, baked into the binary, no calibration data needed. Q4_K_M is the universal default."
+  },
+  {
     "slug": "/foundations/cpp-memory/stack-vs-heap",
     "track": "foundations",
     "module": "foundations/cpp-memory",

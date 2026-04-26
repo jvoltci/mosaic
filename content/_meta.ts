@@ -18,6 +18,7 @@ export default {
   'llm-architecture': 'LLM Architecture',
   compilers: 'ML Compilers & Hardware',
   applied: 'Applied AI · Build & Ship',
+  'edge-ai': 'Edge AI · On-Device',
   '-- links': { type: 'separator', title: 'Reference' },
   'learning-paths': 'Learning Paths',
   cheatsheet: {

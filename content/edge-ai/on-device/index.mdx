@@ -1,0 +1,73 @@
+---
+title: On-Device Runtimes
+description: The three production paths for running LLMs on phones — llama.cpp, ExecuTorch, Core ML.
+---
+
+# On-Device Runtimes
+
+Three runtimes ship 95% of on-device LLM workloads in 2026: **llama.cpp** (everywhere, GGUF), **ExecuTorch** (PyTorch-native mobile), **Core ML** (Apple Neural Engine). Each has a different sweet spot. This module walks all three end to end.
+
+<ModuleProgress
+  lessons={[
+    { slug: '/edge-ai/on-device/llama-cpp-internals', title: 'llama.cpp Internals', estMin: 16 },
+    { slug: '/edge-ai/on-device/executorch', title: 'ExecuTorch', estMin: 14 },
+    { slug: '/edge-ai/on-device/coreml', title: 'Core ML & ANE', estMin: 14 },
+  ]}
+/>
+
+<Capstone
+  title="The same 3B model on phone via three different runtimes"
+  pitch="Ship Llama-3.2-3B on iOS three ways — llama.cpp Metal, ExecuTorch + Core ML, native Core ML — and benchmark the gap."
+  what="A repo with three working iOS apps (or three branches), each running Llama-3.2-3B. Measure tokens/sec, memory footprint, install size, and thermal-throttle curve for each. The artifact is the side-by-side benchmark report — recruiters and product folks both reach for it."
+  sota={['llama.cpp + Metal', 'ExecuTorch + Core ML delegate', 'Core ML (CoreMLTools conversion)', 'iPhone 15 Pro or 16 Pro for testing', 'XCode Instruments for profiling']}
+  device="phone"
+  time="One focused weekend (~14 h, mostly XCode setup)"
+  level="advanced"
+  steps={[
+    {
+      title: 'Set up XCode + a real device',
+      goal: 'Free Apple Developer account, target an iPhone you own. Get a hello-world SwiftUI app running on hardware (not simulator — the throttle curve only shows on real silicon).',
+      checkpoint: 'Your hello-world app is on your phone via XCode build-and-run.',
+      est: '60 min',
+    },
+    {
+      title: 'Path 1 — llama.cpp + Metal',
+      goal: 'Build llama.cpp\'s Metal-enabled XCFramework. Bundle Q4_K_M Llama-3.2-3B GGUF. Wire prompt → tokens via the C API; measure tok/s on real device. (See [llama.cpp Internals](./llama-cpp-internals).)',
+      checkpoint: '~10–20 tok/s steady-state on iPhone 15 Pro for 3B Q4_K_M.',
+      trap: 'Metal init must happen on main thread; check `ggml_metal_init()` return.',
+      est: '180 min',
+    },
+    {
+      title: 'Path 2 — ExecuTorch + Core ML delegate',
+      goal: 'torch.export → to_edge → CoreML partitioner → .pte. Bundle the .pte; load via the ExecuTorch Swift API. The Core ML delegate runs ANE-eligible subgraphs on the Neural Engine. (See [ExecuTorch](./executorch).)',
+      checkpoint: 'Streams tokens; tok/s comparable to or better than llama.cpp.',
+      trap: 'Quantization in ExecuTorch is via PT2E — register the quantizer before partitioning, not after.',
+      est: '180 min',
+    },
+    {
+      title: 'Path 3 — Native Core ML',
+      goal: 'Convert Llama-3.2-3B via coremltools to a `.mlpackage`. Use the new mlmodelc compiler (Xcode 15+) for ANE-aware compilation. Embed in app, run via CoreML Swift API. (See [Core ML & ANE](./coreml).)',
+      checkpoint: 'Native Core ML path produces tokens; ANE shows up in Instruments power trace.',
+      trap: 'Core ML\'s conversion of attention is finicky; some shapes need explicit static-cache configuration.',
+      est: '180 min',
+    },
+    {
+      title: 'Benchmark all three',
+      goal: 'Same prompt, same output length (256 tokens), 10 runs each. Plot tok/s, peak memory, install size, time-to-first-token, ANE/GPU/CPU compute split (via Instruments).',
+      checkpoint: 'Side-by-side bar chart with all three paths labeled. Numbers feel realistic (within 30% of each other typically).',
+      est: '90 min',
+    },
+    {
+      title: 'README + push',
+      goal: 'Repo with three branches (or three subdirs); README explains the trade-offs of each runtime, embeds the benchmark plot, and recommends "use X if Y."',
+      checkpoint: 'A reader can pick a runtime for their constraint in 5 minutes by reading the README.',
+      est: '60 min',
+    },
+  ]}
+  outcomes={[
+    'Three working LLM-on-phone implementations — the canonical edge AI engineer\'s portfolio piece',
+    'Felt knowledge of which runtime to reach for in which situation',
+    'Fluency with iOS profiling tools (Instruments power trace, ANE counters)',
+    'A benchmark methodology you can re-run on every new model and runtime version',
+  ]}
+/>

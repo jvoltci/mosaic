@@ -18,6 +18,7 @@ export type TrackKey =
   | 'llm-architecture'
   | 'compilers'
   | 'applied'
+  | 'edge-ai'
 
 export type Tile = {
   slug: string
@@ -39,6 +40,7 @@ export const TRACK_LABELS: Record<TrackKey, string> = {
   'llm-architecture': 'LLM Architecture',
   compilers: 'ML Compilers & Hardware',
   applied: 'Applied AI · Build & Ship',
+  'edge-ai': 'Edge AI · On-Device',
 }
 
 export const TRACK_ACCENT: Record<TrackKey, string> = {
@@ -48,6 +50,7 @@ export const TRACK_ACCENT: Record<TrackKey, string> = {
   'llm-architecture': 'var(--m-track-architecture)',
   compilers: 'var(--m-track-compilers)',
   applied: 'var(--m-track-applied)',
+  'edge-ai': 'var(--m-track-edge-ai)',
 }
 
 export const TRACK_NUM: Record<TrackKey, string> = {
@@ -57,6 +60,7 @@ export const TRACK_NUM: Record<TrackKey, string> = {
   'llm-architecture': '04',
   compilers: '05',
   applied: '06',
+  'edge-ai': '07',
 }
 
 export const TRACK_SHORT: Record<TrackKey, string> = {
@@ -66,6 +70,7 @@ export const TRACK_SHORT: Record<TrackKey, string> = {
   'llm-architecture': 'LLMs',
   compilers: 'Compilers',
   applied: 'Applied',
+  'edge-ai': 'Edge AI',
 }
 
 /** @deprecated Kept for backwards compat — prefer TRACK_NUM. */
@@ -76,6 +81,7 @@ export const TRACK_ICON: Record<TrackKey, string> = {
   'llm-architecture': '04',
   compilers: '05',
   applied: '06',
+  'edge-ai': '07',
 }
 
 export const TRACK_TAGLINE: Record<TrackKey, string> = {
@@ -85,6 +91,7 @@ export const TRACK_TAGLINE: Record<TrackKey, string> = {
   'llm-architecture': 'Transformers from a systems lens.',
   compilers: 'From a high-level graph to optimized hardware.',
   applied: 'Build a working AI app on your phone — and ship it.',
+  'edge-ai': 'AI off the cloud — on phones, NPUs, and $50 boards.',
 }
 
 export const TILES: Tile[] = [
@@ -193,6 +200,18 @@ export const TILES: Tile[] = [
   { slug: '/applied/frontier/audio',                fallback: '/applied/frontier', title: 'Audio & Voice',         summary: 'Whisper + Claude + Kokoro — a voice agent end-to-end.',                    track: 'applied', moduleName: 'Frontier',    q: 2, r: 4, illustration: 'placeholder', available: false },
   { slug: '/applied/frontier/safety',               fallback: '/applied/frontier', title: 'Safety & Injection',    summary: 'Llama Guard, dual-LLM, spotlighting — defense-in-depth that actually works.', track: 'applied', moduleName: 'Frontier', q: 3, r: 4, illustration: 'placeholder', available: false },
   { slug: '/applied/frontier/capstone',             fallback: '/applied/frontier', title: 'Capstone: Ship It',     summary: 'Build, eval, and deploy a production RAG-agent in one weekend.',          track: 'applied', moduleName: 'Frontier',    q: 4, r: 4, illustration: 'placeholder', available: false },
+
+  // ════════════════════ EDGE AI (lichen) ════════════════════
+  // Module: On-Device Runtimes
+  { slug: '/edge-ai/on-device/llama-cpp-internals', fallback: '/edge-ai/on-device', title: 'llama.cpp Internals',     summary: 'GGUF, mmap, Metal/Vulkan/NEON — the canonical local LLM runtime.',     track: 'edge-ai', moduleName: 'On-Device', q: -9, r: 5, illustration: 'placeholder', available: true },
+  { slug: '/edge-ai/on-device/executorch',          fallback: '/edge-ai/on-device', title: 'ExecuTorch',              summary: 'PyTorch\'s mobile runtime — torch.export → EXIR → .pte on iOS/Android.', track: 'edge-ai', moduleName: 'On-Device', q: -8, r: 5, illustration: 'placeholder', available: true },
+  { slug: '/edge-ai/on-device/coreml',              fallback: '/edge-ai/on-device', title: 'Core ML & ANE',           summary: 'Apple Neural Engine; Core ML + MLX as the iOS Intelligence stack.',     track: 'edge-ai', moduleName: 'On-Device', q: -7, r: 5, illustration: 'placeholder', available: true },
+  // Module: NPU Stacks
+  { slug: '/edge-ai/npu/hexagon',                   fallback: '/edge-ai/npu', title: 'Qualcomm Hexagon',         summary: 'Snapdragon NPU; QNN SDK; INT4/INT8 paths for Android phones + robots.', track: 'edge-ai', moduleName: 'NPU', q: -9, r: 6, illustration: 'placeholder', available: true },
+  // Module: Edge Quantization
+  { slug: '/edge-ai/edge-quant/gguf-and-imatrix',   fallback: '/edge-ai/edge-quant', title: 'GGUF & i-matrix',     summary: 'The local-LLM file format; importance-matrix calibration; K-quants.',  track: 'edge-ai', moduleName: 'Edge Quant', q: -9, r: 7, illustration: 'placeholder', available: true },
+  // Module: Distillation
+  { slug: '/edge-ai/distillation/small-llms',       fallback: '/edge-ai/distillation', title: 'Small LLMs & Distillation', summary: 'TinyLlama, MiniCPM, Qwen2.5-Mobile recipes — how 3B models are made.', track: 'edge-ai', moduleName: 'Distillation', q: -8, r: 6, illustration: 'placeholder', available: true },
 ]
 
 export const ANCHOR_TILES = ['stack-vs-heap', 'gemm', 'rope', 'kv-cache', 'mlir']
@@ -205,6 +224,7 @@ export function tilesByTrack(): Record<TrackKey, Tile[]> {
     'llm-architecture': [],
     compilers: [],
     applied: [],
+    'edge-ai': [],
   }
   for (const t of TILES) out[t.track].push(t)
   return out

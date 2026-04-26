@@ -21,6 +21,7 @@ const TRACK_ORDER: TrackKey[] = [
   'llm-architecture',
   'compilers',
   'applied',
+  'edge-ai',
 ]
 
 export function CourseNav() {
