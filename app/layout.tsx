@@ -48,14 +48,31 @@ export const viewport = {
   initialScale: 1,
 }
 
+// Inline script — runs before React hydration, sets html class from
+// localStorage or system preference. Prevents flash on first paint.
+const THEME_INIT_SCRIPT = `
+try {
+  var t = localStorage.getItem('mosaic:theme');
+  var sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var dark = t ? (t === 'dark') : sysDark;
+  document.documentElement.classList.toggle('dark', dark);
+  document.documentElement.classList.toggle('light', !dark);
+} catch (e) {
+  document.documentElement.classList.add('dark');
+}
+`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       dir="ltr"
-      className={`dark ${fraunces.variable} ${sourceSerif.variable} ${inter.variable} ${jetbrains.variable}`}
+      className={`${fraunces.variable} ${sourceSerif.variable} ${inter.variable} ${jetbrains.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
         <CourseShell>{children}</CourseShell>
       </body>

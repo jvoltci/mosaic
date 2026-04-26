@@ -11,6 +11,7 @@ import {
   TILES,
   type TrackKey,
 } from '../../lib/mosaic-tiles'
+import { ThemeToggle } from '../ThemeToggle'
 
 const TRACK_ORDER: TrackKey[] = [
   'foundations',
@@ -89,6 +90,7 @@ export function CourseNav() {
               {completed}/{TILES.length}
             </span>
           )}
+          <ThemeToggle />
           <button
             className="m-nav-burger"
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}

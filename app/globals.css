@@ -2,12 +2,15 @@
    Mosaic — brand tokens
    ============================================================ */
 :root {
+  /* Dark defaults (also serves as fallback if the theme-init script fails) */
   --m-bg: #0a0a0f;
   --m-bg-soft: #12121b;
   --m-fg: #f5f3ee;
   --m-fg-muted: rgba(245, 243, 238, 0.65);
   --m-fg-dim: rgba(245, 243, 238, 0.4);
   --m-border: rgba(245, 243, 238, 0.08);
+  --m-code-bg: #0e0e16;
+  --m-code-inline-bg: rgba(245, 243, 238, 0.08);
 
   --m-terracotta: #e07a5f;
   --m-sage: #81b29a;
@@ -24,6 +27,30 @@
 
   --m-nav-h: 56px;
   --m-content-max: 44rem;
+
+  color-scheme: dark;
+}
+
+/* Light theme — activated by inline init script when user prefers light */
+html.light {
+  --m-bg: #fbfaf6;
+  --m-bg-soft: #f3f0e9;
+  --m-fg: #1a1a24;
+  --m-fg-muted: rgba(26, 26, 36, 0.7);
+  --m-fg-dim: rgba(26, 26, 36, 0.45);
+  --m-border: rgba(26, 26, 36, 0.10);
+  --m-code-bg: #f3f0e9;
+  --m-code-inline-bg: rgba(26, 26, 36, 0.06);
+
+  /* Slightly darken track accents for AAA contrast on light bg */
+  --m-track-foundations: #c45a3f;
+  --m-track-execution: #5a8e76;
+  --m-track-training: #9a4a87;
+  --m-track-architecture: #b8902f;
+  --m-track-compilers: #3d6ba8;
+  --m-track-applied: #2f7d72;
+
+  color-scheme: light;
 }
 
 /* ============================================================
@@ -389,7 +416,7 @@ body {
   font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
   font-size: 0.86em;
   padding: 0.1em 0.35em;
-  background: rgba(245, 243, 238, 0.08);
+  background: var(--m-code-inline-bg);
   border-radius: 0.3rem;
   color: var(--m-fg);
   font-feature-settings: normal;
@@ -399,7 +426,7 @@ body {
   font-size: 0.85rem;
   line-height: 1.65;
   padding: 1.1rem 1.2rem;
-  background: #0e0e16;
+  background: var(--m-code-bg);
   border: 1px solid var(--m-border);
   border-radius: 0.6rem;
   overflow-x: auto;
@@ -1986,6 +2013,29 @@ body {
   .m-capstone-pitch { font-size: 0.98rem; }
   .m-capstone-cta { flex-direction: column; }
   .m-capstone-btn { text-align: center; }
+}
+
+/* ============================================================
+   Theme toggle (sun/moon icon in nav)
+   ============================================================ */
+.m-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 0.45rem;
+  border: 1px solid var(--m-border);
+  background: transparent;
+  color: var(--m-fg-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+.m-theme-toggle:hover {
+  color: var(--m-fg);
+  background: rgba(127, 127, 127, 0.08);
+  border-color: rgba(127, 127, 127, 0.18);
 }
 
 /* ============================================================
