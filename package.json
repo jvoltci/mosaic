@@ -4,12 +4,13 @@
   "private": true,
   "description": "A free, self-paced course on AI Systems, ML Compilers, and AI Architectures.",
   "scripts": {
-    "predev": "node scripts/build-cheatsheet.mjs",
+    "predev": "node scripts/verify-mapping.mjs && node scripts/build-cheatsheet.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/build-cheatsheet.mjs",
+    "prebuild": "node scripts/verify-mapping.mjs && node scripts/build-cheatsheet.mjs",
     "build": "next build",
     "start": "next start",
-    "build-cheatsheet": "node scripts/build-cheatsheet.mjs"
+    "build-cheatsheet": "node scripts/build-cheatsheet.mjs",
+    "verify-mapping": "node scripts/verify-mapping.mjs"
   },
   "dependencies": {
     "next": "^15.1.0",
