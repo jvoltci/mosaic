@@ -3438,6 +3438,141 @@ h2.m-focus-h2.is-active {
 }
 
 /* ============================================================
+   Search trigger + Cmd-K modal (Pagefind-backed)
+   ============================================================ */
+.m-search-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.32rem 0.65rem 0.32rem 0.55rem;
+  border: 1px solid var(--m-border);
+  border-radius: 0.45rem;
+  background: var(--m-bg);
+  color: var(--m-fg-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.m-search-trigger:hover {
+  color: var(--m-fg);
+  border-color: color-mix(in srgb, var(--m-fg) 25%, transparent);
+}
+.m-search-kbd {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--m-border);
+  border-radius: 0.3rem;
+  background: var(--m-bg-soft);
+  color: var(--m-fg-dim);
+}
+@media (max-width: 768px) {
+  .m-search-trigger-label, .m-search-kbd { display: none; }
+  .m-search-trigger { padding: 0.4rem 0.55rem; }
+}
+
+.m-search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8vh;
+}
+.m-search-scrim {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: none;
+  cursor: default;
+}
+.m-search-panel {
+  position: relative;
+  width: min(640px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--m-bg);
+  border: 1px solid var(--m-border);
+  border-radius: 0.85rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.m-search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem 0.95rem;
+  border-bottom: 1px solid var(--m-border);
+}
+.m-search-icon { color: var(--m-fg-dim); font-size: 1.05rem; }
+.m-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--m-fg);
+  font: inherit;
+  font-size: 1rem;
+}
+.m-search-input::placeholder { color: var(--m-fg-dim); }
+.m-search-kbd-esc { font-size: 0.68rem; }
+
+.m-search-results {
+  overflow-y: auto;
+  padding: 0.55rem 0.55rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.m-search-note {
+  margin: 0.6rem 0.5rem;
+  font-size: 0.86rem;
+  color: var(--m-fg-muted);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+.m-search-note code {
+  background: var(--m-bg-soft);
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.3rem;
+  font-size: 0.85em;
+}
+.m-search-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.55rem;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+.m-search-hit:hover { background: color-mix(in srgb, var(--m-fg) 4%, transparent); }
+.m-search-hit-title {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 600;
+  color: var(--m-fg);
+  font-size: 0.98rem;
+}
+.m-search-hit-excerpt {
+  color: var(--m-fg-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.m-search-hit-excerpt mark,
+.m-search-hit-title mark {
+  background: color-mix(in srgb, var(--m-amber, #f2cc8f) 35%, transparent);
+  color: var(--m-fg);
+  padding: 0 0.1rem;
+  border-radius: 0.15rem;
+}
+
+/* ============================================================
    Favorite (★) button — sits in the lesson breadcrumb
    ============================================================ */
 .m-fav-btn {

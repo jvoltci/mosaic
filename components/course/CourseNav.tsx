@@ -13,6 +13,7 @@ import {
 } from '../../lib/mosaic-tiles'
 import { useProgress } from '../../lib/use-progress'
 import { ThemeToggle } from '../ThemeToggle'
+import { Search } from '../Search'
 
 const TRACK_ORDER: TrackKey[] = [
   'foundations',
@@ -65,6 +66,7 @@ export function CourseNav() {
         </div>
 
         <div className="m-nav-actions">
+          <Search />
           <Link href="/map" className="m-nav-action">Map</Link>
           <Link href="/cheatsheet" className="m-nav-action">Cheatsheet</Link>
           <Link href="/favorites" className="m-nav-action" aria-label="Saved lessons">★</Link>
