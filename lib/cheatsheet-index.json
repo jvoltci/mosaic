@@ -1,10 +1,52 @@
 [
   {
+    "slug": "/applied/frontier/audio",
+    "track": "applied",
+    "module": "applied/frontier",
+    "title": "Audio & Voice",
+    "tldr": "- The 2026 voice-agent stack: **STT (Whisper / Distil-Whisper)** → **LLM (Claude / GPT / open)** → **TTS (Kokoro / OpenAI / ElevenLabs)** → audio out. Latency target: under 1 second total round-trip.\n- **Whisper** is OpenAI's open-source STT model — multilingual, extremely robust to noise. Distil-Whisper is a 6× smaller / faster variant with ~95% of Whisper-Large's accuracy.\n- **TTS in 2026**: **Kokoro** (~80M params, near-human quality, runs on a phone) is the open frontier; **ElevenLabs / OpenAI Voice / PlayHT** lead on hosted quality and voice cloning.\n- **End-to-end voice models** (GPT-4o-Audio, Claude voice mode, Moshi) skip the STT/TTS sandwich — audio in, audio out, no text intermediate. Latency drops below 300 ms but architectural maturity is still 2025-fresh.\n- For most product builders: **Whisper + LLM + Kokoro** running locally is the cheapest path; hosted APIs are the fastest-to-ship."
+  },
+  {
+    "slug": "/applied/frontier/capstone",
+    "track": "applied",
+    "module": "applied/frontier",
+    "title": "Capstone — Ship It",
+    "tldr": "- The Applied AI track culminates here: **build, eval, and deploy a working RAG-agent that you can use in real life**. The lessons up to this point are the parts; this is the assembly.\n- Pick a real problem you have. Not a demo. Not a Hello-World. **Something you would actually use weekly** — your reading inbox, your meeting notes, your coding context, your research notes.\n- The full stack: ingest pipeline → chunked + indexed (hybrid retrieval) → ReAct agent with MCP tools → structured-output API → minimal UI → deployed somewhere persistent.\n- **Eval is the bar.** Without an eval, you have a demo. With an eval, you have a product. Build the eval *before* you start optimizing.\n- Most teams fail this not on technical capability but on scoping. **Cut features ruthlessly.** A working v0 in one weekend beats a half-built v3 in a month."
+  },
+  {
+    "slug": "/applied/frontier/multimodal",
+    "track": "applied",
+    "module": "applied/frontier",
+    "title": "Multimodal (Vision)",
+    "tldr": "- A **vision-language model (VLM)** processes images alongside text. Architecture: image encoder (ViT or CNN) → projection layer → transformer decoder. Works exactly like text-only LLMs at the decoder stage.\n- **CLIP** (OpenAI, 2021) was the breakthrough — contrastive image-text training producing aligned embeddings. Still the foundation of most vision retrieval; SigLIP (Google, 2023) is the modern improvement.\n- **Frontier VLMs** in 2026: **Claude Sonnet/Opus 4 with vision, GPT-4o, Gemini 2.x, Llama 3.2-Vision, Qwen2-VL, InternVL2** — all natively multimodal, not text-then-vision adapters.\n- **Document understanding** (PDFs, charts, screenshots) is the killer app: extract structured data from unstructured visual content. Used heavily in agents that need to \"see\" software UIs.\n- For 2026 production: prefer hosted VLMs for general use; self-host **Qwen2-VL** or **InternVL2** when on-device or compliance matters."
+  },
+  {
+    "slug": "/applied/frontier/safety",
+    "track": "applied",
+    "module": "applied/frontier",
+    "title": "Safety & Injection",
+    "tldr": "- **Prompt injection** is the canonical LLM security failure: untrusted input (a doc, a webpage, a tool result) contains instructions that hijack the model. Two flavors: **direct** (user types malicious prompt) and **indirect** (malicious content arrives via tool / RAG / agent loop).\n- There is **no model-side fix** that's bulletproof. Guardrails reduce risk; they don't eliminate it. The 2026 production answer is **defense in depth**.\n- **Llama Guard / Granite Guardian / WildGuard**: small classifier LLMs that screen inputs and outputs. ~95% accuracy on adversarial benchmarks; ship in production at every major lab.\n- **Dual-LLM pattern**: a \"privileged\" LLM that holds secrets / takes actions; a \"quarantined\" LLM that processes untrusted content. They communicate via structured channels only.\n- **Spotlighting**: tag untrusted content (delimiters, encodings) so the model knows it's data, not instructions. Combined with Pydantic structured output, the most practical defense."
+  },
+  {
+    "slug": "/applied/llm-basics/embeddings",
+    "track": "applied",
+    "module": "applied/llm-basics",
+    "title": "Embeddings",
+    "tldr": "- An **embedding** is a fixed-size vector that represents text (or images, audio, anything). Similar inputs get similar vectors. Cosine similarity is the standard distance.\n- **Modern dense embeddings**: 768–4096 dimensions, contrastively-trained on hard pairs. Top open models (April 2026): **Nomic Embed v2, BGE-M3, Stella-1.5B, GTE-Qwen2**, all near-frontier OpenAI / Voyage parity.\n- **Matryoshka embeddings** can be truncated — a 1024-dim vector still works at 256-dim, just with slightly lower quality. Lets one model serve fast / accurate / storage-cheap variants.\n- **Hybrid retrieval (dense + sparse)** beats pure dense or pure BM25 by ~5–10 points NDCG@10 on most retrieval benchmarks. Production pipelines reach for both.\n- **Reranking** (a smaller cross-encoder model that scores query/doc pairs) at ~50× the cost per call but ~10× higher precision is the third stage of the 2026 retrieval stack."
+  },
+  {
     "slug": "/applied/llm-basics/prompting",
     "track": "applied",
     "module": "applied/llm-basics",
     "title": "Prompt Engineering Foundations",
     "tldr": "- **Zero-shot is the default.** Add complexity only when the model fails — every extra technique is more tokens, more cost, more places to fail.\n- **Few-shot** locks in format and style. It can also lock in *errors* if your examples are wrong; a bad few-shot is worse than zero-shot.\n- **Chain-of-thought** helps on multi-step problems (math, planning) and *hurts* on simple classification. Not a free lunch.\n- **Self-consistency** = sample N CoT reasonings, take the majority answer. Genuinely better on reasoning tasks; N× cost.\n- **Structured output** (JSON mode, Pydantic, Outlines) is how you build real systems. Always prefer schema-validated output over regex."
+  },
+  {
+    "slug": "/applied/llm-basics/structured-output",
+    "track": "applied",
+    "module": "applied/llm-basics",
+    "title": "Structured Output",
+    "tldr": "- Reliable structured output requires three layers: **schema definition** (Pydantic / TypeBox / Zod) → **constrained decoding on the server** (XGrammar, Outlines) → **validation + retry on the client** (Instructor, structured-outputs APIs).\n- **Pydantic is the universal frontend.** Define your schema as a Python class; libraries (instructor, openai's `response_format`, anthropic's tool-use, vllm) consume it directly.\n- **The server doing constrained decoding is what matters most.** Without it, you're trusting the model to produce valid JSON ~95% of the time, retrying the rest. With it, output is guaranteed.\n- For 2026 production: vLLM v1 / SGLang / TensorRT-LLM ship XGrammar; OpenAI / Anthropic APIs enforce schemas natively. **Default to `response_format=PydanticClass`; don't roll your own JSON parsing.**\n- Schemas should be **simple, flat, well-named**. Deeply-nested schemas with many enums confuse small models; LLM-friendly schemas align with how training data was shaped."
   },
   {
     "slug": "/applied/llm-basics/tool-use",
@@ -21,11 +63,25 @@
     "tldr": "- **Naive RAG fails** on multi-hop questions, vague queries, and entity-centric corpora. Symptom: high retrieval recall on facts, low task accuracy.\n- **HyDE** generates a hypothetical answer with the LLM, embeds it, then retrieves — bridges the query/document phrasing gap.\n- **Query decomposition** breaks one question into 2–4 sub-queries, retrieves for each, then reasons over the union. Best for multi-hop.\n- **GraphRAG** (Microsoft, 2024) builds a knowledge graph from the corpus, then summarizes communities — beats vector search on \"global\" questions a chunk can't answer alone.\n- **Agentic retrieval** lets the model decide its own searches in a loop. Highest ceiling, highest cost, hardest to debug."
   },
   {
+    "slug": "/applied/rag-agents/mcp",
+    "track": "applied",
+    "module": "applied/rag-agents",
+    "title": "Model Context Protocol",
+    "tldr": "- **MCP (Model Context Protocol)** is an open spec — released by Anthropic in late 2024, adopted broadly through 2025–2026 — for **how an LLM client (Claude Desktop, Cursor, custom agent) discovers and calls tools / reads files / fetches prompts** from an external server.\n- Three primitives: **tools** (functions the LLM can invoke), **resources** (files / URLs the LLM can read), **prompts** (parameterized templates the user can invoke).\n- One protocol, many transports: stdio (local subprocess), SSE / HTTP (network). Servers can be written in **TypeScript, Python, Go, Rust** — official SDKs in all of these.\n- The 2026 ecosystem: hundreds of public MCP servers (databases, APIs, file systems, GitHub, Slack, Linear). **Claude Desktop, Cursor, VS Code, Zed, Continue.dev** all consume MCP. Building an MCP server is the new \"build an integration.\"\n- Compared to ad-hoc tool definitions: MCP **decouples** the tool implementation from the client. Write once, ship everywhere."
+  },
+  {
     "slug": "/applied/rag-agents/rag-basics",
     "track": "applied",
     "module": "applied/rag-agents",
     "title": "RAG Fundamentals",
     "tldr": "- **RAG = retrieval + generation.** Pull the most relevant chunks for a question, stuff them in the prompt, let the model answer.\n- **The pipeline:** chunk documents → embed → store → retrieve top-k → re-rank → stuff into prompt → generate.\n- **Hybrid retrieval (dense + BM25 fused via RRF) beats either alone.** Dense gets meaning; BM25 gets exact keywords.\n- **A cross-encoder re-ranker is the highest-leverage stage.** It sees the query and chunks together and re-scores. Adds 100 ms, can lift Recall@5 by 15+ points.\n- **Chunking is underrated.** Recursive character splitting at ~400 tokens with 50-token overlap is the sane default. Semantic chunking is sometimes worth it; rarely worth it from day one."
+  },
+  {
+    "slug": "/applied/rag-agents/react-agents",
+    "track": "applied",
+    "module": "applied/rag-agents",
+    "title": "Build a ReAct Agent",
+    "tldr": "- **ReAct** (Yao et al., 2022) = **Reason + Act**. The agent alternates between *thinking* (free-text reasoning), *acting* (calling a tool), and *observing* (reading the tool's output). Same pattern, every modern LLM agent.\n- The architecture is small: an LLM, a list of tools (functions), a loop. **A working ReAct agent is ~80 lines of Python**, no LangChain required.\n- **Tool-use APIs** (OpenAI function-calling, Anthropic tools) handle the structured-output side of \"the model picks a tool and arguments.\" Your code dispatches and returns the observation.\n- **Termination conditions matter**: max iterations, success-by-the-model-saying-done, or a result-format match. Without them you loop forever.\n- LangGraph, OpenAI Assistants API, Anthropic's `messages.create` with tools — all are productionizations of the same loop. **Build it once from scratch and the framework code becomes legible.**"
   },
   {
     "slug": "/applied/serve/cost-latency",
