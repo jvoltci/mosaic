@@ -143,6 +143,52 @@ This is what powers most production "deep research" agents. Highest ceiling — 
 
 The right pick is task-dependent. **Default to hybrid + rerank** (Lesson: RAG Fundamentals); reach for these only when you've measured failure modes that match.
 
+## Run it in your browser — see HyDE close the embedding gap
+
+The mechanic: a short jargon query has poor cosine sim with a long technical chunk; a *hypothetical answer* in the chunk's register matches it much better. We hard-code the fake answer (in production an LLM generates it) and watch the score jump.
+
+<RunInBrowser
+  description="Toy bag-of-words 'embedder' showing why HyDE retrieves better than the raw query."
+  code={`from collections import Counter
+import re, math
+
+def embed(s):
+    return Counter(re.findall(r"\\w+", s.lower()))
+
+def cosine(a, b):
+    keys = set(a) | set(b)
+    dot = sum(a[k] * b[k] for k in keys)
+    na = sum(v*v for v in a.values()) ** 0.5
+    nb = sum(v*v for v in b.values()) ** 0.5
+    return dot / (na * nb + 1e-9)
+
+# Real document chunk (technical, long).
+chunk = ("Grouped-query attention shares key and value projections across head groups, "
+         "reducing the KV cache by a factor of H/G where H is query heads and G is groups. "
+         "Llama-3-70B uses 64 query heads and 8 KV heads — an 8x cache reduction over MHA "
+         "with no measurable quality loss on standard benchmarks.")
+
+# Short jargon query — what a user actually types.
+query = "How does GQA reduce memory?"
+
+# Hypothetical answer — what an LLM would generate from the query alone (HyDE step).
+# In production, this comes from llm.generate(); here we hard-code a plausible one.
+hyde_answer = ("Grouped-query attention reduces the key-value cache size by sharing "
+               "key and value projections across multiple query heads, lowering memory "
+               "for long-context inference.")
+
+# Compare cosine similarities.
+print(f"cos(query,        chunk) = {cosine(embed(query), embed(chunk)):.3f}")
+print(f"cos(hyde-answer,  chunk) = {cosine(embed(hyde_answer), embed(chunk)):.3f}")
+print()
+print("The HyDE answer shares vocabulary with the chunk (\\"key\\", \\"value\\",")
+print("\\"projections\\", \\"reduce\\", \\"memory\\") that the raw query never used.")
+print("Real dense embeddings show the same effect more dramatically.")
+`}
+/>
+
+The takeaway: HyDE works because *embedded space proximity is shaped by vocabulary as much as semantics*. The fake answer brings the query into the chunk's neighborhood. RRF-fusing both `query` and `hyde_answer` retrievals is the production pattern — robust when the LLM hallucinates a wrong premise.
+
 ## Quick check
 
 <Quiz

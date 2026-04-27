@@ -52,9 +52,9 @@ The mental difference: **APC** is a hash table; **RadixAttention** is a tree. Th
 
 ### Why a *block-aligned* hash works
 
-KV blocks are typically 16 tokens. A block's contents are determined by the *tokens themselves plus the tokens before it* (because each KV vector depends on the entire preceding context via the attention pattern… wait, no — KV at position `t` depends only on positions `[0..t]` through self-attention. K and V at position `t` are projections of `h_t`, where `h_t` came from layer L-1 attending over `h_{t}` and earlier).
+KV blocks are typically 16 tokens. K and V at position `t` are projections of `h_t`, the hidden state output by the previous layer — and `h_t` was produced by self-attention over positions `[0..t]`. So a block's KV contents are fully determined by the prefix of tokens up to that block.
 
-So the hash of a block is `hash(prefix_tokens_so_far)`. Two requests that share the first 312 blocks **bit-exactly** share KV for those 312 blocks — no recomputation, no quality cost, no approximation.
+That means the hash of a block is `hash(prefix_tokens_so_far)`. Two requests that share the first 312 blocks **bit-exactly** share KV for those 312 blocks — no recomputation, no quality cost, no approximation.
 
 ```python
 # vLLM's APC, in spirit

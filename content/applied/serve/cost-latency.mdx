@@ -149,7 +149,9 @@ The non-obvious bit is how each step *enables* the next: prefix caching reduces 
     big_seconds = gpu_seconds * big_share
     small_seconds = gpu_seconds * routing_small_share / routing_small_cheaper
     total_seconds = big_seconds + small_seconds
-    return (total_seconds / 3600) * gpu_dollars_per_hour * (n_gpus / max(1, n_gpus))
+    # Per-GPU-hour cost; n_gpus cancels out because total_seconds is per-GPU work
+    # under a load-balanced fleet (work_per_gpu = total_work / n_gpus, cost = n_gpus * $/hr).
+    return (total_seconds / 3600) * gpu_dollars_per_hour
 
 # Customer-support chatbot baseline
 base = dict(

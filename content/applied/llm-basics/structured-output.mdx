@@ -236,7 +236,7 @@ For the model's **reasoning trace** (R1-style, o-series), don't constrain — th
 
 ```python
 # Pass 1: free-form reasoning
-reasoning = client.chat.completions.create(model="o1", messages=[...])
+reasoning = client.chat.completions.create(model="o3", messages=[...])
 
 # Pass 2: structured extraction from the reasoning
 final = client.beta.chat.completions.parse(

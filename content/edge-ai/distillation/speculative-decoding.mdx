@@ -97,11 +97,11 @@ What if you don't want to ship two models?
 
 **Medusa** (Cai et al., 2024) adds extra heads to the target model that predict tokens N+2, N+3, N+4. Each head is small (~0.5% of model params). Train the heads briefly on the target's own outputs. Now the target *itself* drafts.
 
-**EAGLE-2** (Li et al., 2024) goes further: a small auto-regressive head that uses the target's hidden states to draft, achieving 80%+ acceptance on chat. Production result: 3–4× speedup, no separate draft model.
+**EAGLE-2** (Li et al., 2024) goes further: a small auto-regressive head that uses the target's hidden states to draft, achieving 80%+ acceptance on chat. **EAGLE-3** (Li et al., 2025) refines the recipe with multi-step training and dynamic draft trees, pushing acceptance rates higher and achieving 3–4× speedup with no separate draft model.
 
 Both add ~3–10% to model size and require fine-tuning of the draft heads (a few hours on a single GPU). Output is bit-identical to vanilla decoding.
 
-For phone deployment, EAGLE-2 is the right pick when memory is tight (one model, not two). Use a separate draft model when memory is comfortable and you can pick a high-quality off-the-shelf small model.
+For phone deployment, EAGLE-2 / EAGLE-3 are the right pick when memory is tight (one model, not two). Use a separate draft model when memory is comfortable and you can pick a high-quality off-the-shelf small model.
 
 ### Lookahead — no draft model at all
 
@@ -209,7 +209,7 @@ The math makes the K hyperparameter selection concrete: pick K based on workload
 2. **The math works because target verification of K tokens costs ~1.1× a single token** on phone hardware (memory-bandwidth-bound).
 3. **Acceptance rate (α) is the whole game** — same family + same fine-tune + 5–10% draft size = α ≈ 0.75 = ~2× speedup.
 4. **K=4–6 is the chat sweet spot**; K=6–8 for code; K=4 or skip for creative writing.
-5. **Self-speculative variants (Medusa, EAGLE-2)** ship one model with extra heads instead of two models — better when memory is tight.
+5. **Self-speculative variants (Medusa, EAGLE-2/EAGLE-3)** ship one model with extra heads instead of two models — better when memory is tight.
 6. **Lookahead** is the no-draft, no-training fallback; modest speedup, zero overhead.
 7. **llama.cpp ships this natively** (`llama_speculative_*`); it's a few lines on top of an existing chat app.
 
@@ -219,7 +219,8 @@ The math makes the K hyperparameter selection concrete: pick K based on workload
   items={[
     { kind: 'paper', href: 'https://arxiv.org/abs/2211.17192', title: 'Fast Inference from Transformers via Speculative Decoding', author: 'Leviathan et al., 2022', note: 'The original paper. The bit-identical proof is the load-bearing math.' },
     { kind: 'paper', href: 'https://arxiv.org/abs/2401.10774', title: 'Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads', author: 'Cai et al., 2024', note: 'Self-speculative — extra heads on the target model. The "no separate draft model" path.' },
-    { kind: 'paper', href: 'https://arxiv.org/abs/2406.16858', title: 'EAGLE-2: Faster Inference of Language Models with Dynamic Draft Trees', author: 'Li et al., 2024', note: 'Current frontier — 80%+ acceptance, 3–4× speedup. The right self-speculative method as of 2025.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2406.16858', title: 'EAGLE-2: Faster Inference of Language Models with Dynamic Draft Trees', author: 'Li et al., 2024', note: 'The dynamic-draft-tree refinement; widely deployed.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2503.01840', title: 'EAGLE-3: Scaling up Inference Acceleration of Large Language Models', author: 'Li et al., 2025', note: 'Current frontier — multi-step training, 80%+ acceptance, ~3× speedup on production workloads.' },
     { kind: 'paper', href: 'https://arxiv.org/abs/2402.02057', title: 'Lookahead Decoding: A Parallel Decoding Algorithm', author: 'Fu et al., 2024', note: 'No draft model. Reads target model\'s own n-gram cache.' },
     { kind: 'blog', href: 'https://huggingface.co/blog/whisper-speculative-decoding', title: 'Speculative Decoding for 2× Faster Whisper Inference', author: 'Sanchit Gandhi (HuggingFace), 2023', note: 'Same trick applied to Whisper — speech recognition is just another transformer.' },
     { kind: 'docs', href: 'https://github.com/ggerganov/llama.cpp/tree/master/examples/speculative', title: 'llama.cpp speculative example', author: 'Georgi Gerganov', note: 'The reference implementation in C. ~300 lines, the canonical pattern.' },

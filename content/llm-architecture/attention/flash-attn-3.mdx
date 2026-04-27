@@ -1,6 +1,6 @@
 ---
 title: FlashAttention-3
-description: IO-aware attention that turned the memory math on its head — and the Hopper-tuned async/warp-specialized version that's the 2024 frontier.
+description: IO-aware attention that turned the memory math on its head — and the Hopper / Blackwell async/warp-specialized version that's the 2024–2026 frontier.
 last_reviewed: 2026-04-26
 ---
 # FlashAttention-3
@@ -79,7 +79,7 @@ After the last K-block, divide by $\ell$. Mathematically identical to standard s
 | **WGMMA** | Hopper's warpgroup matmul instruction | Higher throughput than mma.sync for big tiles |
 | **FP8 with block scaling** | E4M3 inputs, FP32 accumulation, per-block scale factors | ~2× throughput vs BF16 with negligible quality loss |
 
-Result: **~75% of H100 BF16 peak**, **~85% of FP8 peak** in published numbers.
+Result: **~75% of H100 BF16 peak**, **~85% of FP8 peak** in published numbers. **On Blackwell (B200/B300)** the same kernel family — adapted for 5th-gen tensor cores and FP4 — pushes attention throughput further still; expect another ~1.5–2× over H100 for matched configurations as the kernels mature through 2026.
 
 ## Run it in your browser
 

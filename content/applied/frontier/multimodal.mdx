@@ -85,7 +85,7 @@ with open("invoice.pdf", "rb") as f:
     pdf_b64 = base64.b64encode(f.read()).decode()
 
 response = client.messages.create(
-    model="claude-sonnet-4",
+    model="claude-sonnet-4-5",
     max_tokens=2048,
     messages=[{
         "role": "user",

@@ -182,7 +182,6 @@ def fake_llm(prompt, latency_ms_mean=80):
     """Pretend LLM call. Sometimes 'fails' (fake refusal) at 5% rate."""
     delay = random.gauss(latency_ms_mean, latency_ms_mean / 4) / 1000
     if delay < 0: delay = 0.001
-    perf_counter()
     end = perf_counter() + delay
     while perf_counter() < end: pass
     if random.random() < 0.05:

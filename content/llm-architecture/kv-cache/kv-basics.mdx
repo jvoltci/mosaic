@@ -8,7 +8,7 @@ last_reviewed: 2026-04-26
 ## TL;DR
 
 - Without a KV cache, every token would re-attend over the entire prompt. With it, each new token does *one* extra row of attention math.
-- The cache is `2 × n_layers × n_kv_heads × head_dim × seq_len × dtype_bytes`. For Llama 3.1 70B at 8K context that's **~10 GB** — often more than the weights.
+- The cache is `2 × n_layers × n_kv_heads × head_dim × seq_len × dtype_bytes`. For Llama 3.1 70B at 32K context that's **~10 GB** — often more than the weights.
 - The cache lives on the GPU and grows linearly with each generated token. Long contexts OOM on the cache long before they OOM on weights.
 - Every modern serving optimization (PagedAttention, prefix caching, MLA, KV quantization) is fundamentally about managing this one buffer.
 

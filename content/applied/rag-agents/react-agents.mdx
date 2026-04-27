@@ -83,7 +83,7 @@ def react_loop(user_query: str, max_iters: int = 10) -> str:
 
     for i in range(max_iters):
         response = client.messages.create(
-            model="claude-sonnet-4",
+            model="claude-sonnet-4-5",
             max_tokens=2048,
             tools=tools_spec,
             messages=messages,

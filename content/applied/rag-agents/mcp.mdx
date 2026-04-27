@@ -69,7 +69,7 @@ def calculate(expression: str) -> str:
 @mcp.resource("config://settings")
 def get_settings() -> str:
     """Return application settings."""
-    return '{"theme": "dark", "model": "claude-sonnet-4"}'
+    return '{"theme": "dark", "model": "claude-sonnet-4-5"}'
 
 @mcp.prompt()
 def code_review(language: str = "python") -> str:
@@ -176,7 +176,7 @@ async with StdioClient(command="python", args=["./db_server.py"]) as client:
 
     # Pass to your LLM
     response = anthropic_client.messages.create(
-        model="claude-sonnet-4",
+        model="claude-sonnet-4-5",
         tools=tools_spec,
         messages=[...],
     )

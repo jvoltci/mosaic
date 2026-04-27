@@ -53,9 +53,9 @@ v̂_t = v_t / (1 - β2^t)
 x_t = x_{t-1} - η · ( m̂_t / (√v̂_t + ε) + λ · x_{t-1} )   # decoupled WD
 ```
 
-State per parameter: 2 buffers ($m$, $v$). Total optimizer memory ~ **2 × params** at the parameter dtype, often plus FP32 master copies (so 8 bytes × params for FP32 master + 4 bytes × params for $m, v$ in BF16 ≈ **12 bytes / parameter**).
+State per parameter: 2 buffers ($m$, $v$). Standard mixed-precision Adam keeps **FP32 master weights (4 bytes) + FP32 $m$ (4 bytes) + FP32 $v$ (4 bytes) = 12 bytes / parameter** of optimizer-side state, on top of the BF16 model weights themselves.
 
-For 70B params, that's ~840 GB of optimizer state if everything is FP32. In practice you keep $m, v$ in BF16 (FP32 master remains), reducing to ~420 GB. ZeRO-1 / FSDP shard this across data-parallel ranks.
+For 70B params, that's ~840 GB of optimizer state if $m, v$ stay in FP32. Many production runs keep $m, v$ in BF16 (FP32 master weights remain), giving 4 + 2 + 2 = 8 bytes / parameter ≈ ~560 GB. ZeRO-1 / FSDP shard this across data-parallel ranks.
 
 **Why decoupled weight decay (the W in AdamW)?** Vanilla Adam adds weight decay through $g_t \mathrel{+}= \lambda x$, which gets divided by $\sqrt{v_t}$ — making the effective decay strength parameter-specific. AdamW applies decay directly to $x_t$, decoupled from the gradient scaling. Result: weight decay actually does what you think it does.
 
