@@ -1,10 +1,254 @@
 ---
 title: Sampling
 description: Temperature, top-k, top-p, min-p — what each knob actually does to the next-token distribution, and which one is currently winning.
-last_reviewed: 2026-04-26
+last_reviewed: 2026-04-27
 ---
 
 # Sampling
+
+<Mode is="learn">
+
+When you call `model.generate(temperature=0.7, top_p=0.9)`, the model itself stops at one specific point: it produces a vector of <Term name="logits">logits</Term>, one per vocabulary token. Everything that happens between "here are the logits" and "here is the next token" is **sampling**, and it lives outside the model. It's the cheapest knob in your stack — a few microseconds per token, no GPU work — and the one most likely to be set wrong.
+
+A bad temperature on a code model means hallucinated APIs. A bad top-p on a creative model means slop. A 2024 study showed switching default sampling from `top_p=0.9` to `min_p=0.05` cut hallucination on long-form generation by ~10% on the same model with no other changes. **Sampling is free quality.** This lesson walks through every lever — temperature, top-k, top-p, min-p, repetition penalties — in the order a production stack applies them, and shows why min-p has quietly become the 2024–2026 default while top-p is on its way out.
+
+## TL;DR
+
+- The model outputs **logits** — one number per vocab token. Sampling is everything that turns those logits into a single chosen token.
+- **Temperature** rescales logits before softmax. T < 1 sharpens; T > 1 flattens; T = 0 is greedy argmax.
+- **Top-k** keeps only the k highest-probability tokens, renormalizes, samples. Crude but cheap.
+- **Top-p (nucleus)** keeps the smallest set whose cumulative probability ≥ p, renormalizes, samples. The default for Llama / Mistral / GPT for years.
+- **Min-p** keeps tokens whose probability is ≥ `p_min × max_prob`. **Adapts to the distribution's confidence** — wider when the model is uncertain, narrower when it's sharp. The 2024–2026 frontier; default in DeepSeek-R1, Qwen-3, and llama.cpp.
+- **Order of operations matters.** Logit penalties → temperature → top-k → top-p / min-p → sample. Doing it in the wrong order changes the result.
+
+## What "sampling" actually is
+
+In a managed-runtime ML library — Hugging Face `transformers`, OpenAI's API, vLLM's serving engine — the user just sees `model.generate(...)`. Inside, the loop is dead simple: run the model forward, get logits over the vocab, pick a token, append it, repeat. The "pick a token" step is the only place you have any agency, and it's a tiny pure function: `logits → token`.
+
+A **logit** is just the unnormalized score for a token. Pass logits through `softmax` and you get a probability distribution over the whole vocab — typically 32K to 256K entries. Sampling is then "given a distribution over tokens, draw one." The fight is over *which* distribution: the raw one, or one we've sharpened, truncated, or biased before drawing.
+
+## Mental model
+
+```mermaid
+flowchart LR
+  L[Logits — V numbers] --> P[Logit processors — repetition, presence penalties, banned tokens]
+  P --> T["Temperature: divide logits by T"]
+  T --> S[softmax → probability distribution over V]
+  S --> K["Top-k: keep k largest, mask rest"]
+  K --> NP["Top-p OR Min-p: drop low-prob tail"]
+  NP --> R[renormalize what's left]
+  R --> X[sample one token from the survivors]
+```
+
+Each filter is a "what to throw away" step. The output is always a smaller distribution than the input; the sample is drawn at the end.
+
+## Temperature
+
+Logits `z` of shape `(V,)`. Probabilities are `p = softmax(z / T)`. The math:
+
+- `T = 1` is unchanged.
+- `T → 0` puts all mass on `argmax(z)` — pure greedy.
+- `T → ∞` flattens to uniform.
+- `T = 0.7` (typical chat default) is "be a little more decisive than uniform."
+
+Temperature acts on logits, **not** probabilities — `softmax(z / 2)` is mathematically different from `softmax(z) / 2` (the latter isn't even a distribution). Engines that "scale probabilities" instead of logits are subtly broken.
+
+## Top-k
+
+Keep the `k` largest-probability tokens, set the rest to 0, renormalize, sample. Simple, fast, but **k is workload-dependent**: if the true distribution puts 99% of mass on 4 tokens, `top_k=50` leaves 46 essentially-zero options that occasionally hit; if the distribution is spread over 200 reasonable tokens, `top_k=50` truncates real information.
+
+People usually set `top_k=40` and leave it. It's a safety net, not a primary lever.
+
+## Top-p (nucleus sampling)
+
+Sort tokens by probability. Sum from the top until you cross threshold `p`. Keep that prefix; drop the rest. Renormalize. Sample.
+
+```python
+def top_p(probs, p):
+    idx = np.argsort(-probs)            # descending
+    csum = np.cumsum(probs[idx])
+    keep = idx[csum <= p]
+    if len(keep) == 0: keep = idx[:1]   # always keep at least one
+    if csum[len(keep)-1] < p and len(keep) < len(idx):
+        keep = idx[:len(keep)+1]        # include the boundary token
+    out = np.zeros_like(probs)
+    out[keep] = probs[keep]
+    return out / out.sum()
+```
+
+Top-p adapts to the *shape* of the distribution: if the model is confident (most mass on top-3), top-p keeps top-3; if it's diffuse (mass spread over 50), top-p keeps 50. That's why it dethroned top-k as the default around 2019 (Holtzman et al.).
+
+But it has a known failure mode: when the distribution is **bimodal** (one good answer plus a fat tail of near-equal weak alternatives), top-p often dips into the tail. The "right" answer fits in p=0.5, but at p=0.9 you've also admitted 30 marginal tokens.
+
+## Min-p — the 2024 fix
+
+Top-p uses *cumulative* mass as its threshold; <Term name="min-p">min-p</Term> uses *peak-relative* mass.
+
+```python
+def min_p(probs, p_min=0.05):
+    threshold = p_min * probs.max()
+    keep = probs >= threshold
+    out = np.where(keep, probs, 0)
+    return out / out.sum()
+```
+
+If the top token has probability 0.6, min-p with `p_min=0.05` keeps any token with probability ≥ 0.03. If the top token has probability 0.1 (the model is uncertain), min-p keeps any token with probability ≥ 0.005 — *the gate widens automatically*. The result: **sharp distributions stay sharp, diffuse distributions stay diverse**, exactly the opposite of what top-p does in those edge cases.
+
+Empirically, min-p produces *less hallucination* on long-form generation and *more diversity* on creative tasks, both relative to top-p. Adopted by llama.cpp, vLLM, DeepSeek-R1, Qwen-3, and most local-LLM frontends in 2024–2025.
+
+## Order of operations
+
+The conventional order, in vLLM / llama.cpp / Hugging Face:
+
+```
+logits
+  → repetition / presence / frequency penalties (modify logits in place)
+  → temperature (divide logits)
+  → softmax → probabilities
+  → top_k     (keep top k)
+  → top_p     (cumulative nucleus)
+  → min_p     (peak-relative cutoff)
+  → renormalize
+  → sample
+```
+
+The reason temperature comes *before* top-k/p: cooling logits with `T < 1` concentrates mass on the top tokens, which changes which tokens survive top-k/p. Doing temperature *after* the filter would be a different operation; engines that get the order wrong produce subtly wrong samples.
+
+## Logit penalties
+
+Three classics, all applied to logits before temperature:
+
+| Penalty       | What it does                                      | Typical value | When |
+|---------------|---------------------------------------------------|---------------|------|
+| `repetition_penalty` | Divide logits of recently-seen tokens by `r > 1`. | 1.05–1.2 | Most tasks. Prevents direct loops. |
+| `presence_penalty` (OpenAI-style) | Subtract a constant from logits of any token already used. | 0–1 | Encourages new topics. |
+| `frequency_penalty` | Subtract `f × count(token)` from logits. | 0–1 | Discourages over-use of a single word. |
+
+Repetition penalty is the only one most production stacks turn on by default. Presence/frequency are knobs you reach for when generating divergent outputs (brainstorming, summarization variants).
+
+## Reasoning models flip the script
+
+DeepSeek-R1, OpenAI o-series, Qwen-3 reasoning models all recommend **temperature 0.6, top-p 0.95, min-p 0.0** for the reasoning trace, then often a second pass at lower temperature for the final answer. The reasoning trace benefits from diversity (find a path through the search space); the final answer benefits from determinism (don't introduce a typo into the conclusion).
+
+This is a real architectural thing, not a sampling trick: many production stacks now run two sampling configs per request, switching at a sentinel token like `</think>`.
+
+## Recipes that work
+
+| Task                       | T    | top_p | min_p | top_k | rep_pen |
+|----------------------------|------|-------|-------|-------|---------|
+| Code completion (precise)  | 0.2  | —     | 0.05  | —     | 1.0     |
+| Chat (default)             | 0.7  | —     | 0.05  | 40    | 1.05    |
+| Creative writing           | 0.9  | —     | 0.02  | —     | 1.1     |
+| Reasoning trace (R1-style) | 0.6  | 0.95  | —     | —     | 1.0     |
+| Final answer extraction    | 0.0  | —     | —     | —     | 1.0     |
+| Summarization              | 0.4  | —     | 0.1   | —     | 1.05    |
+
+These are starting points, not laws. Tune on your eval, not your gut.
+
+## Run it in your browser
+
+Pick a fake logit distribution, watch each sampler's probability mass shift.
+
+<RunInBrowser
+  description="See how temperature, top-p, and min-p reshape the same logits."
+  code={`import numpy as np
+
+def softmax(z):
+    z = z - z.max()
+    e = np.exp(z)
+    return e / e.sum()
+
+def apply_temperature(logits, T): return logits / max(T, 1e-9)
+
+def top_p(probs, p):
+    idx = np.argsort(-probs)
+    csum = np.cumsum(probs[idx])
+    keep_n = int(np.searchsorted(csum, p)) + 1
+    keep = idx[:keep_n]
+    out = np.zeros_like(probs); out[keep] = probs[keep]
+    return out / out.sum()
+
+def min_p(probs, p_min):
+    keep = probs >= p_min * probs.max()
+    out = np.where(keep, probs, 0)
+    return out / out.sum()
+
+# Pretend logits over an 8-token "vocab", post-LLM. Slightly bimodal.
+logits = np.array([5.0, 4.8, 2.0, 1.9, 1.8, 1.7, 1.6, 1.5])
+labels = list("abcdefgh")
+
+def show(name, probs):
+    s = "  ".join(f"{labels[i]}={probs[i]:.3f}" for i in range(len(probs)) if probs[i] > 1e-6)
+    print(f"{name:<24} {s}  (kept={int((probs > 1e-6).sum())})")
+
+print("Bimodal-ish logits — two confident tokens, six fuzzy alternatives\\n")
+
+for T in (0.7, 1.0, 1.5):
+    p = softmax(apply_temperature(logits, T))
+    show(f"T={T}", p)
+
+print()
+base = softmax(logits)
+show("base (T=1)", base)
+show("top_p=0.9", top_p(base, 0.9))
+show("top_p=0.5", top_p(base, 0.5))
+show("min_p=0.05", min_p(base, 0.05))
+show("min_p=0.20", min_p(base, 0.20))
+
+print("\\nNotice: top_p=0.9 admits the long tail (e..h have ~0.07 mass each).")
+print("min_p=0.20 cleanly keeps just the two confident tokens — no tail.")
+`}
+/>
+
+The teaching moment: at top-p=0.9, the model lets in the entire fuzzy tail. At min-p=0.2, it cleanly keeps only the two genuinely-confident options. On the *same* logits.
+
+## Quick check
+
+<FillIn
+  prompt="The right place to apply temperature, relative to top-p:"
+  answer="before top-p"
+  accept={["before", "before top_p", "first", "before topp"]}
+  hint="Temperature reshapes the distribution; the filter then operates on the reshaped one."
+  explanation="Temperature is applied to logits before softmax; top-p is applied to the resulting probabilities. Reversing them gives a different, generally worse, distribution."
+/>
+
+<Quiz
+  question="A team uses `temperature=0.7, top_p=0.9` and notices their model occasionally emits implausible nouns mid-sentence (e.g., 'we deployed the truck to production'). Best first move?"
+  options={[
+    'Lower temperature to 0.3.',
+    'Switch to `min_p=0.05`, drop top_p.',
+    'Raise top_p to 0.95.',
+    'Add `frequency_penalty=1.0`.',
+  ]}
+  answer={1}
+  explanation="The symptom is the textbook top-p tail problem: when the model is highly confident (sharp distribution), top_p=0.9 still admits the long tail of low-probability tokens that occasionally get sampled. min_p=0.05 cuts off any token below 5% of the peak — the implausible nouns are exactly those tokens. Lowering temperature also helps but at the cost of all diversity, including legitimate variation."
+/>
+
+## Key takeaways
+
+1. **Temperature → softmax → top-k → top-p / min-p → sample.** This order is not negotiable; reversing it produces a different (usually worse) distribution.
+2. **Min-p is the modern default** for high-quality generation. Top-p is a 2019-era tool that struggles in bimodal cases. Adopt min-p where your stack supports it.
+3. **Reasoning models want a two-config setup**: high-diversity for the trace, deterministic for the final answer. Pin a sampler-switch on the `</think>` (or equivalent) sentinel.
+4. **Repetition penalty 1.05–1.10 is almost always on.** Presence and frequency penalties are situational.
+5. **Sampling is free quality.** Re-tune your defaults every time you change models — what worked for Llama-3.1 is not optimal for DeepSeek-R1 or Qwen-3.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'paper', href: 'https://arxiv.org/abs/1904.09751', title: 'The Curious Case of Neural Text Degeneration', author: 'Holtzman et al., 2019', note: 'The nucleus sampling (top-p) paper. Section 4 shows why pure top-k is broken on language.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2407.01082', title: 'Min-p Sampling: Balancing Creativity and Coherence at High Temperature', author: 'Nguyen et al., 2024', note: 'The min-p paper. Read section 3 for the dynamic-cutoff motivation; section 5 has the head-to-head with top-p.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2501.12948', title: 'DeepSeek-R1 Technical Report', author: 'DeepSeek-AI, 2025', note: 'Section "Inference Recipe" specifies T=0.6, top_p=0.95 for the reasoning trace. The two-config setup is real.' },
+    { kind: 'blog', href: 'https://huggingface.co/blog/how-to-generate', title: 'Hugging Face — How to generate text', note: 'Best gentle introduction to all the samplers, with side-by-side examples in transformers.' },
+    { kind: 'blog', href: 'https://artefact2.github.io/llm-sampling/', title: 'Sampling: an interactive demo', author: 'Artefact2, 2024', note: 'Drag a slider; watch the distribution. The single best intuition-builder for top-p vs min-p.' },
+    { kind: 'docs', href: 'https://docs.vllm.ai/en/latest/models/generative_models.html', title: 'vLLM — Sampling Parameters', note: 'Authoritative on order-of-operations and which params are supported in v1.' },
+    { kind: 'repo', href: 'https://github.com/ggerganov/llama.cpp', title: 'ggerganov/llama.cpp', note: '`common/sampling.cpp` is the canonical reference for sampler ordering. Read the `llama_sampler_chain` setup.' },
+  ]}
+/>
+
+</Mode>
+
+<Mode is="reference">
 
 ## TL;DR
 
@@ -239,5 +483,7 @@ The teaching moment: at top-p=0.9, the model lets in the entire fuzzy tail. At m
     { kind: 'repo', href: 'https://github.com/ggerganov/llama.cpp', title: 'ggerganov/llama.cpp', note: '`common/sampling.cpp` is the canonical reference for sampler ordering. Read the `llama_sampler_chain` setup.' },
   ]}
 />
+
+</Mode>
 
 <LessonComplete />
