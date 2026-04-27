@@ -3047,9 +3047,11 @@ h2.m-focus-h2.is-active {
   color: var(--m-fg);
   border-top: 1px solid var(--m-border);
   max-height: 18rem;
-  overflow: auto;
-  white-space: pre;
-  word-break: normal;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   tab-size: 4;
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'calt' 0;

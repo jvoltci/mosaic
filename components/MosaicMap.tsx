@@ -127,7 +127,6 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
               const slug = tile.available ? tile.slug : tile.fallback
               const target = `${process.env.NEXT_PUBLIC_BASE_PATH || ''}${slug}`
 
-              const isPlaceholder = tile.illustration === 'placeholder'
               return (
                 <a
                   key={tile.slug}
@@ -160,21 +159,9 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
                   <g transform={`translate(${x.toFixed(2)} ${y.toFixed(2)})`}>
                     <path d={hexPath(0, 0, hexSize)} className="m-mtile-hex" />
                     <g className="m-mtile-art" pointerEvents="none">
-                      {isCompleted && isPlaceholder ? (
-                        // Placeholder tiles: replace the dots with a big centered checkmark on completion.
-                        <path
-                          d={`M${(-hexSize * 0.30).toFixed(2)},0 L${(-hexSize * 0.05).toFixed(2)},${(hexSize * 0.22).toFixed(2)} L${(hexSize * 0.34).toFixed(2)},${(-hexSize * 0.24).toFixed(2)}`}
-                          stroke={accent}
-                          strokeWidth={hexSize * 0.13}
-                          fill="none"
-                          strokeLinejoin="round"
-                          strokeLinecap="round"
-                        />
-                      ) : (
-                        <Illustration color={isCompleted ? accent : 'var(--m-fg)'} size={hexSize} />
-                      )}
+                      <Illustration color={isCompleted ? accent : 'var(--m-fg)'} size={hexSize} />
                     </g>
-                    {isCompleted && !isPlaceholder && (
+                    {isCompleted && (
                       <g
                         transform={`translate(${(hexSize * 0.55).toFixed(2)} ${(-hexSize * 0.6).toFixed(2)})`}
                         pointerEvents="none"
