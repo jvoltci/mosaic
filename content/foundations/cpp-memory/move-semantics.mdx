@@ -1,10 +1,219 @@
 ---
 title: Move Semantics
 description: Rvalue references, std::move, and the cost of a copy you didn't want.
-last_reviewed: 2026-04-26
+last_reviewed: 2026-04-27
 ---
 
 # Move Semantics
+
+<Mode is="learn">
+
+In a managed language, "transferring ownership" of a list is invisible — you assign the variable to a new name, and the runtime quietly shares one underlying buffer. There's no concept of "did this copy a megabyte or just rebind a pointer?" because the runtime hides the difference.
+
+C++ doesn't hide it. By default, `std::vector<float> y = compute(x);` *copies* — allocates a fresh heap buffer, `memcpy`s every float across. For a million-element tensor that's a ~4 ms tax on a single line. Across a thousand-tensor forward pass, those copies become the program.
+
+**Move semantics** are the language feature that says: "I'm done with this — you can take its guts." Instead of duplicating the buffer, the move just hands over the pointer and zeroes the source. Same observable result. About 10,000× faster.
+
+This lesson is about the machinery: <Term name="rvalue">rvalues</Term>, `T&&`, `std::move`, and why every modern C++ container is built on top of them.
+
+## TL;DR
+
+- A **copy** of a `vector<float>` of size N allocates a fresh heap buffer and `memcpy`s N floats. **A move** swaps internal pointers and leaves the source empty. **Same result; ~10000× faster.**
+- C++11 added **rvalue references (`T&&`)** and `std::move` to express "I'm done with this; you can take its guts." Modern C++ depends on them everywhere — every standard container, every smart pointer.
+- The **rule of zero** is the modern C++ design ideal: write classes that don't need a destructor, copy constructor, or move constructor — let the compiler synthesize them from member types. PyTorch's tensor classes follow this almost completely.
+- **Return-value optimization (<Term name="rvo">RVO</Term>)** has made many naive returns "free" for years; move semantics fill in the gaps RVO can't reach (e.g., returning one of two locals).
+- For ML systems code: **heap allocations on a hot path are the enemy.** Move semantics + small-buffer optimization + arena allocators are the toolkit for keeping tensors out of malloc.
+
+## The two kinds of expressions
+
+C++ classifies every expression as either an <Term name="lvalue">lvalue</Term> or an <Term name="rvalue">rvalue</Term>:
+
+- **lvalue**: has a name you can take the address of. `x`, `arr[3]`, `*p`. *Persistent.*
+- **rvalue**: a temporary, no name. `5`, `a + b`, the value just returned by a function. *About to disappear.*
+
+The distinction matters because rvalues are *safe to steal from*. They have no future user — no one will read them after this expression ends. So the language gives you a way to say "this one is movable":
+
+```cpp
+int x = 5;
+int&  l = x;     // OK — bind lvalue ref to lvalue
+int&& r = 5;     // OK — bind rvalue ref to rvalue (the temporary 5)
+int&  bad = 5;   // ERROR — can't bind lvalue ref to rvalue
+int&& bad2 = x;  // ERROR — x is an lvalue (it has a name)
+```
+
+`T&&` is the type that says "I want a temporary." A function overloaded on `T&&` is the function that gets called when the argument is "about to disappear."
+
+## Copy vs move, in pictures
+
+```mermaid
+flowchart LR
+  A["vector<float> a(1M)"] -->|copy ctor| B["NEW heap buffer\n memcpy 4MB"]
+  A -->|move ctor| C["SAME heap buffer\n a is now empty"]
+```
+
+A copy duplicates the buffer. A move steals the pointer.
+
+In code:
+
+```cpp
+void take(const std::vector<float>& v);  // copy version
+void take(std::vector<float>&& v);       // move version
+
+std::vector<float> a(1000);
+take(a);             // calls copy version (a is an lvalue)
+take(std::move(a));  // calls move version; a is now in a "moved-from" state
+```
+
+`std::move(a)` is just a cast — it produces an rvalue reference to `a` so the move overload is selected. The actual data movement happens inside the move constructor, not inside `std::move` itself.
+
+After `std::move(a)`, `a` is *valid but unspecified*. Don't read from it; do destroy it.
+
+## The move constructor
+
+A class with a heap buffer should provide both ways:
+
+```cpp
+struct Buffer {
+  float* data;
+  size_t n;
+
+  // Copy: allocate + memcpy. SLOW.
+  Buffer(const Buffer& other) : n(other.n) {
+    data = new float[n];
+    std::memcpy(data, other.data, n * sizeof(float));
+  }
+
+  // Move: steal pointer. FAST.
+  Buffer(Buffer&& other) noexcept : data(other.data), n(other.n) {
+    other.data = nullptr;
+    other.n = 0;
+  }
+
+  ~Buffer() { delete[] data; }
+};
+```
+
+`std::vector`, `std::unique_ptr`, `std::string`, every well-behaved C++ container — all roughly this shape. The `noexcept` on the move constructor matters: without it, `vector::resize` falls back to copying for safety.
+
+## Rule of zero, three, five
+
+- **Rule of zero**: don't define any of (<Term name="destructor">destructor</Term>, copy ctor, move ctor, copy assignment, move assignment). Let the compiler synthesize them from your member types. *This is the goal.*
+- **Rule of three**: if you need one of (destructor, copy ctor, copy assignment), you probably need all three.
+- **Rule of five**: same with move ctor + move assignment added.
+
+Modern C++ favors rule-of-zero design: have your class hold its resources via `std::vector`, `std::unique_ptr`, etc., and the compiler does the right thing. Hand-written destructors are a sign you should reach for one of those wrappers instead.
+
+## RVO — when the compiler does even better
+
+```cpp
+std::vector<float> make_big() {
+  std::vector<float> v(1'000'000);
+  // ... fill v ...
+  return v;          // RVO: constructed directly in caller's frame, no copy
+}
+
+auto x = make_big(); // no allocation, no copy
+```
+
+The compiler is allowed (and required, since C++17 for some cases) to elide the copy here. Even without `std::move`, returning a local by value is essentially free.
+
+**Don't write `return std::move(v)`** — it can defeat <Term name="rvo">RVO</Term> and force a move where the compiler would have done zero copies. `return v;` is right.
+
+## Where it shows up in ML
+
+Every PyTorch op returns a Tensor by value. Internally the tensor is a small struct (~64 bytes) wrapping a refcounted storage pointer. Move semantics let you write:
+
+```python
+y = relu(x @ w + b)
+```
+
+and have it produce one final tensor with no intermediate-tensor copies. The C++ side moves intermediates as it goes; the Python side never knows.
+
+When you call `.contiguous()` on a non-contiguous tensor, that *does* allocate. Most other ops operate via views or in-place. Knowing which ops allocate (and which don't) is the [Contiguous vs Non-Contiguous](../../ml-execution/tensors-in-memory/contiguous-vs-non) discipline.
+
+## Run it in your browser — the cost of a copy
+
+<RunInBrowser
+  description="Time list-copy vs list-swap in pure Python (no C++ compiler in the browser, but the proportion is the same)."
+  code={`import time
+
+def benchmark(label, fn, iters=10000):
+    t0 = time.perf_counter()
+    for _ in range(iters): fn()
+    return (time.perf_counter() - t0) * 1e6 / iters  # microseconds per iter
+
+big = list(range(100_000))
+
+# "Copy": full duplicate
+def copy():
+    return list(big)
+
+# "Move": just rebind the name (no allocation)
+def move():
+    nonlocal_big = big
+    return nonlocal_big
+
+print(f"copy 100K-element list: {benchmark('copy', copy):>7.1f} μs / call")
+print(f"'move' (rebind):        {benchmark('move', move):>7.1f} μs / call")
+print()
+print("In C++, the analogue of 'move' is one pointer assignment + setting source to null.")
+print("The cost ratio of copy:move scales with N for copy and stays at O(1) for move.")
+print()
+
+# Same shape on bigger inputs
+for n in (10_000, 100_000, 1_000_000):
+    big = list(range(n))
+    print(f"n={n:>7}:  copy={benchmark('copy', copy, iters=100):>8.1f} μs   move={benchmark('move', move, iters=100):>5.1f} μs")
+`}
+/>
+
+The shape — copy scales with N, move stays O(1) — is exactly the C++ vector picture, just with Python's GIL adding overhead.
+
+## Quick check
+
+<FillIn
+  prompt="The cast that converts an lvalue into an rvalue (so a move constructor will be selected):"
+  answer="std::move"
+  accept={["move", "std::move(...)"]}
+  hint="Two words including the namespace; canonical name."
+  explanation="`std::move(x)` is *just a cast* — it produces an rvalue reference to x. The actual data movement happens in the move constructor that gets selected by overload resolution."
+/>
+
+<Quiz
+  question="A function returns a `std::vector<float>` by value. Should you `return std::move(v)`?"
+  options={[
+    'Yes, it makes the return faster.',
+    'No — the compiler is required (in many cases) to elide the copy entirely (RVO). `return std::move(v)` defeats this and forces a move where there was zero copy.',
+    'Only if v is large.',
+    'Only if compiling with C++11.',
+  ]}
+  answer={1}
+  explanation="Return-value optimization (NRVO) and copy elision (mandatory since C++17 in some cases) usually beat any explicit move. `return v;` is the right answer; the compiler will elide the copy. `return std::move(v);` defeats elision because the rvalue cast produces a different expression class."
+/>
+
+## Key takeaways
+
+1. **Copies allocate; moves swap pointers.** ~10000× speed gap on big buffers.
+2. **`T&&` and `std::move`** are the language machinery. Every standard container provides both copy and move.
+3. **Rule of zero** is the modern design ideal — let compiler-synthesized members do the work.
+4. **Don't `return std::move(v)`** — it defeats copy elision.
+5. **All modern ML systems code is built on this.** PyTorch, every CUDA wrapper, every tensor library.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'docs', href: 'https://en.cppreference.com/w/cpp/utility/move', title: 'cppreference — std::move', note: 'Canonical reference. The "Notes" section covers when std::move is and isn\'t the right call.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=St0MNEU5b0o', title: 'Howard Hinnant — Everything You Ever Wanted to Know About Move Semantics', note: 'The author of std::move and unique_ptr. Long but the canonical talk.' },
+    { kind: 'blog', href: 'https://herbsutter.com/2013/04/05/gotw-93-solution-auto-variables-part-1/', title: 'Herb Sutter — GotW #93: Auto Variables', note: 'Best practical guide to when copies happen and when they\'re elided.' },
+    { kind: 'paper', href: 'https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2002/n1377.htm', title: 'A Proposal to Add Move Semantics to C++ (N1377)', author: 'Hinnant, 2002', note: 'The original proposal. Useful for understanding the design space.' },
+    { kind: 'docs', href: 'https://isocpp.org/wiki/faq/cpp11-language', title: 'isocpp FAQ — C++11 Language Features', note: 'Move semantics in context with the rest of C++11.' },
+  ]}
+/>
+
+</Mode>
+
+<Mode is="reference">
 
 > **Prereq:** [Stack vs Heap](./stack-vs-heap). Move semantics are a way to avoid the heap traffic that a naive copy would cause.
 
@@ -197,5 +406,7 @@ The shape — copy scales with N, move stays O(1) — is exactly the C++ vector 
     { kind: 'docs', href: 'https://isocpp.org/wiki/faq/cpp11-language', title: 'isocpp FAQ — C++11 Language Features', note: 'Move semantics in context with the rest of C++11.' },
   ]}
 />
+
+</Mode>
 
 <LessonComplete />

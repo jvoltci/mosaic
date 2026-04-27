@@ -1,10 +1,274 @@
 ---
 title: Smart Pointers & RAII
 description: Ownership encoded in the type system — unique_ptr, shared_ptr, and the RAII discipline that runs every modern C++ codebase.
-last_reviewed: 2026-04-26
+last_reviewed: 2026-04-27
 ---
 
 # Smart Pointers & RAII
+
+<Mode is="learn">
+
+In a managed language, you almost never think about *who owns* an object. The garbage collector is a quiet shared janitor — eventually, it figures out nothing references the object and frees it. You don't have to plan; you just have to stop using the object.
+
+C++ does the opposite. Every heap allocation has exactly one owner, and you encode that ownership in the *type* of the variable that holds it. When the owner goes out of scope, its <Term name="destructor">destructor</Term> runs and the resource is released. No garbage collector, no pauses, no surprises about *when* cleanup happens.
+
+The pattern that makes this work is called **RAII** — Resource Acquisition Is Initialization. The type system carries the ownership; the destructor does the cleanup. **Smart pointers** are the tools that turn raw memory into an RAII resource.
+
+This lesson is a tour of the three main shapes (`unique_ptr`, `shared_ptr`, `weak_ptr`), how the same pattern generalizes to files / locks / GPU handles, and the cost model behind each.
+
+## TL;DR
+
+- **RAII** = Resource Acquisition Is Initialization. The C++ pattern where a resource (memory, file, lock, mutex) is owned by an object whose <Term name="destructor">destructor</Term> releases it. **The single most important C++ idea.**
+- **`std::unique_ptr<T>`** owns a heap allocation. Non-copyable, movable. Destructor calls `delete`. Zero overhead vs raw pointer. Default for "this is mine."
+- **`std::shared_ptr<T>`** is reference-counted ownership — destructor decrements the refcount; when it hits 0, `delete`. ~24 bytes overhead per pointer + atomic refcount operations on copy / destroy. Default for "shared between threads / scopes."
+- **`std::weak_ptr<T>`** is a non-owning observer for `shared_ptr`. Used to break cycles.
+- ML systems code uses `unique_ptr` for owned buffers, `shared_ptr` for tensor storage (PyTorch's `intrusive_ptr` is a custom variant), and *almost never* raw `new` / `delete`.
+
+## The three ownership shapes
+
+```mermaid
+flowchart LR
+  U["unique_ptr<T>"] -->|owns| O["one heap T"]
+  S1["shared_ptr<T>"] -->|owns| H["one heap T + refcount"]
+  S2["shared_ptr<T>"] -->|owns| H
+  W["weak_ptr<T>"] -.observes.-> H
+  U -.scope exit.-> D1["delete T"]
+  S1 -.last shared_ptr destroyed.-> D2["delete T"]
+```
+
+Read it as three sentences:
+- `unique_ptr<T>` is single ownership. One pointer, one object, one cleanup.
+- `shared_ptr<T>` is shared ownership. Many pointers can co-own; the last one out turns off the lights.
+- `weak_ptr<T>` watches a `shared_ptr<T>` without participating in the refcount.
+
+## `unique_ptr` — the default
+
+```cpp
+auto buf = std::make_unique<float[]>(1024);     // heap-allocate 1024 floats
+buf[0] = 3.14f;                                  // operator[] forwards
+// Destructor at scope exit calls delete[] buf
+```
+
+`unique_ptr<T[]>` is the array variant — it calls `delete[]` correctly. Use `make_unique` (C++14) instead of `unique_ptr<T>(new T(...))` — it's exception-safe, less typing, and generates the same machine code.
+
+`unique_ptr` is **movable but not copyable**. Pass by value to *transfer* ownership, or by reference if the callee just borrows:
+
+```cpp
+void process(std::unique_ptr<Tensor> t);    // takes ownership
+void inspect(const Tensor& t);              // borrows; doesn't own
+
+auto t = std::make_unique<Tensor>(/* ... */);
+inspect(*t);                                 // pass by ref
+process(std::move(t));                       // transfer ownership; t is now null
+```
+
+After `process(std::move(t))`, the local `t` is empty — the function's parameter owns the buffer until *its* scope exits.
+
+**Cost: zero.** A `unique_ptr<T>` is the same size as a raw `T*` and generates the same machine code in optimized builds. The destructor is the only added behavior, and it's just a `delete`.
+
+## `shared_ptr` — when ownership is shared
+
+```cpp
+auto t = std::make_shared<Tensor>(/* ... */);
+// Internally: a 'control block' allocated alongside Tensor
+// holds: refcount (atomic int), weak count, deleter
+
+auto t2 = t;                  // refcount → 2 (atomic increment)
+{
+  auto t3 = t;                // refcount → 3
+}                             // t3 destroyed; refcount → 2
+
+// When the last shared_ptr dies, deleter runs.
+```
+
+Use `make_shared` instead of `shared_ptr<T>(new T(...))` — it allocates the control block and the object together, halving the allocation count.
+
+**Cost:**
+- Pointer size: 16 bytes (vs 8 for raw / `unique_ptr`) — two pointers, one to the object and one to the control block.
+- Copy: one <Term name="atomic variable">atomic</Term> increment.
+- Destroy: one atomic decrement; possibly destroy.
+- Per-thread overhead from the atomic ops can matter on hot paths.
+
+**When to reach for it:** the object outlives any single scope, OR multiple owners, OR threads share ownership. Otherwise prefer `unique_ptr`.
+
+## `weak_ptr` — break cycles
+
+A `shared_ptr` cycle leaks. If `A` holds a `shared_ptr<B>` and `B` holds a `shared_ptr<A>`, neither's refcount ever hits zero. `weak_ptr` breaks the cycle:
+
+```cpp
+struct Node {
+    std::shared_ptr<Node> child;
+    std::weak_ptr<Node> parent;       // doesn't keep parent alive
+};
+```
+
+To use a `weak_ptr`, call `.lock()` to get a `shared_ptr`:
+
+```cpp
+if (auto p = node.parent.lock()) {
+    // p is shared_ptr<Node>, valid until end of this scope
+} // p destroyed; refcount adjusted
+```
+
+If the parent has been destroyed, `.lock()` returns null. This is exactly the observer pattern, encoded in the type system.
+
+## RAII generalizes beyond memory
+
+The same trick — wrap a resource in an object, let the destructor do cleanup — works for *any* resource:
+
+```cpp
+{
+  std::lock_guard<std::mutex> guard(mu);    // acquires mutex
+  // ... critical section ...
+}                                              // releases mutex (destructor)
+
+{
+  std::ofstream f("output.bin");              // opens file
+  f.write(buf, n);
+} // f closed (destructor)
+```
+
+`lock_guard`, `unique_lock`, `ofstream`, `cuda::stream` (NVIDIA), `cublasHandle` (with custom deleter) — all RAII. **Every well-designed C++ resource handle follows this pattern.** Once you internalize it, half of C++ stops feeling like magic.
+
+## PyTorch's `c10::intrusive_ptr`
+
+PyTorch uses a custom shared pointer (`c10::intrusive_ptr`) instead of `std::shared_ptr` for tensor storage. The trick: the refcount lives *inside the object* rather than in a separately-allocated control block. Saves one allocation per tensor and halves the pointer size to 8 bytes. **Standard pattern in performance-critical C++ codebases** (LLVM, Chromium, PyTorch). Your default for general C++ is `std::shared_ptr`; intrusive_ptr is the "I really care about this" variant.
+
+## Custom deleters
+
+`unique_ptr` and `shared_ptr` accept a deleter:
+
+```cpp
+auto handle = std::unique_ptr<cublasHandle_t, decltype(&cublasDestroy)>(
+    new_handle, &cublasDestroy
+);
+```
+
+This is how RAII wraps C-API resources (cuBLAS, NCCL, CUDA streams). When `handle` goes out of scope, your custom deleter runs.
+
+## When raw pointers are still fine
+
+A non-owning, never-null pointer to something with a longer lifetime: just use `T*` (or `T&` if you can). Smart pointers convey *ownership*; if the callee doesn't own, don't make it look like it does.
+
+```cpp
+// Pass by reference for non-null, non-owning
+void inspect(const Tensor& t);
+
+// Or raw pointer for nullable, non-owning
+void maybe_inspect(const Tensor* t);  // nullptr-allowed
+```
+
+## Run it in your browser — refcount lifecycle simulator
+
+<RunInBrowser
+  description="Simulate shared_ptr semantics in Python — refcount, copy, destroy, weak observation."
+  code={`class ControlBlock:
+    def __init__(self, value):
+        self.value = value
+        self.shared_count = 0
+        self.weak_count = 0
+    def __repr__(self):
+        return f"<ControlBlock value={self.value!r} shared={self.shared_count} weak={self.weak_count}>"
+
+class SharedPtr:
+    def __init__(self, cb):
+        self.cb = cb
+        cb.shared_count += 1
+    def __del__(self):
+        if self.cb is None: return
+        self.cb.shared_count -= 1
+        print(f"  shared_ptr destroyed; refcount → {self.cb.shared_count}")
+        if self.cb.shared_count == 0:
+            print(f"  ⚡ deleting object: {self.cb.value!r}")
+            if self.cb.weak_count == 0:
+                self.cb = None
+    def reset(self):
+        self.__del__()
+        self.cb = None
+
+class WeakPtr:
+    def __init__(self, cb):
+        self.cb = cb
+        cb.weak_count += 1
+    def lock(self):
+        if self.cb.shared_count == 0:
+            return None
+        return SharedPtr(self.cb)
+
+# Demo
+print("--- create object via make_shared ---")
+cb = ControlBlock("Tensor[1024]")
+p1 = SharedPtr(cb)
+print(f"after p1 = make_shared: {cb}")
+
+print("\\n--- copy to p2 ---")
+p2 = SharedPtr(cb)
+print(f"refcount: {cb.shared_count}")
+
+print("\\n--- weak_ptr observes ---")
+w = WeakPtr(cb)
+print(f"after weak_ptr: shared={cb.shared_count}, weak={cb.weak_count}")
+
+print("\\n--- locked weak gives a shared again ---")
+p3 = w.lock()
+print(f"refcount: {cb.shared_count}")
+
+print("\\n--- p1, p2, p3 all destroy ---")
+del p1, p2, p3
+# Object should now be deleted
+
+print("\\n--- weak_ptr.lock() now fails ---")
+print(f"  lock returned: {w.lock()}")
+`}
+/>
+
+The shape — refcount up on copy, refcount down on destroy, deleter fires at zero, weak_ptr observes without keeping alive — is exactly `shared_ptr` semantics in miniature.
+
+## Quick check
+
+<FillIn
+  prompt="The smart pointer that owns a single object and is movable but not copyable:"
+  answer="unique_ptr"
+  accept={["std::unique_ptr"]}
+  hint="Single ownership; matches its name."
+  explanation="`unique_ptr` enforces single ownership at the type level — no copy constructor, but a move constructor. Default for owned heap objects in modern C++. Zero runtime overhead vs raw pointers."
+/>
+
+<Quiz
+  question="A team's C++ code uses `shared_ptr` for every tensor. Profiling shows ~5% of CPU time in atomic refcount operations. The right move:"
+  options={[
+    'Switch all `shared_ptr` to raw pointers.',
+    'Where ownership is genuinely single, switch to `unique_ptr` (no atomic overhead). For tensors that need shared ownership, consider `intrusive_ptr` to save a pointer-deref + the second allocation.',
+    'Use `weak_ptr` everywhere.',
+    'Disable atomics with a compiler flag.',
+  ]}
+  answer={1}
+  explanation="Atomic refcount ops on hot paths are a real cost. `unique_ptr` for single-owned data eliminates them entirely. `intrusive_ptr` (PyTorch-style) keeps shared semantics but saves a pointer hop. Going to raw pointers loses RAII safety; weak_ptr is for the cycle problem, not the perf problem."
+/>
+
+## Key takeaways
+
+1. **RAII = resource lifetime tied to scope.** The single most important C++ idea.
+2. **`unique_ptr` is the default** for owned heap objects. Zero overhead vs raw pointer.
+3. **`shared_ptr` for shared ownership** — pays in size + atomic refcount ops.
+4. **`weak_ptr` to break cycles** and observe without owning.
+5. **Modern C++ ML code is smart-pointer-only.** Raw `new`/`delete` is a smell.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'docs', href: 'https://en.cppreference.com/w/cpp/memory/unique_ptr', title: 'cppreference — std::unique_ptr', note: 'Canonical. The "Notes" section covers conversion to/from raw pointers.' },
+    { kind: 'docs', href: 'https://en.cppreference.com/w/cpp/memory/shared_ptr', title: 'cppreference — std::shared_ptr', note: 'Includes the make_shared performance discussion.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=PZ-1at9j1NY', title: 'Herb Sutter — Leak-Freedom in C++... By Default', note: 'The "smart pointers as the rule, raw pointers as exceptions" doctrine.' },
+    { kind: 'blog', href: 'https://www.modernescpp.com/index.php/c-core-guidelines-rules-for-smart-pointers/', title: 'Modernes C++ — Smart Pointer Guidelines', note: 'Practitioner guide; covers the unique_ptr-first discipline well.' },
+    { kind: 'repo', href: 'https://github.com/pytorch/pytorch/blob/main/c10/util/intrusive_ptr.h', title: 'PyTorch c10::intrusive_ptr', note: 'Production-grade intrusive smart pointer. Read for the "shared_ptr but with embedded refcount" design.' },
+  ]}
+/>
+
+</Mode>
+
+<Mode is="reference">
 
 > **Prereqs:** [Stack vs Heap](./stack-vs-heap), [Move Semantics](./move-semantics). Smart pointers are how move semantics get applied to ownership.
 
@@ -260,5 +524,7 @@ The shape — refcount up on copy, refcount down on destroy, deleter fires at ze
     { kind: 'repo', href: 'https://github.com/pytorch/pytorch/blob/main/c10/util/intrusive_ptr.h', title: 'PyTorch c10::intrusive_ptr', note: 'Production-grade intrusive smart pointer. Read for the "shared_ptr but with embedded refcount" design.' },
   ]}
 />
+
+</Mode>
 
 <LessonComplete />
