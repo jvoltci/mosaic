@@ -98,25 +98,49 @@ In-browser arithmetic for "what fits where":
 
 <RunInBrowser
   description="Memory budget calculator for QLoRA fine-tuning. Edit the model size and GPU."
-  code={`def qlora_memory_estimate(params_b, ctx, batch, gpu_gb, rank=16):
-    """Rough QLoRA memory estimate in GB. Approximate; ignores cache fragmentation."""
-    # Frozen base weights at NF4
-    base_gb = params_b * 1e9 * 0.5 / 1024**3   # 4 bits = 0.5 bytes per param
-    # LoRA adapters at BF16 — proportional to rank
-    lora_params = 2 * rank * params_b * 1e9 / 4096  # rough: per linear layer of dim 4096
-    lora_gb = lora_params * 2 / 1024**3
-    # AdamW on adapters only — 8× the BF16 size (m, v, master copy)
-    optim_gb = lora_gb * 8
-    # Activations (forward) — depends on bs × ctx
-    activations_gb = batch * ctx * params_b * 1e9 * 2 / 4096 / 1024**3 * 0.5
-    total = base_gb + lora_gb + optim_gb + activations_gb
-    return base_gb, lora_gb, optim_gb, activations_gb, total
+  code={`def qlora_memory(params_b, ctx, batch, rank=16, target='qkvo+ffn'):
+    """QLoRA memory in GB for a Llama-shaped model: NF4 frozen base + BF16 adapters.
+    Assumes FlashAttention (so attention scores aren't materialized) and AdamW
+    on adapter params only (frozen base has no optimizer state)."""
+    # Llama-family shapes — use a lookup so the demo doesn't depend on a guess.
+    SHAPES = {
+        1:  dict(d=2048, d_ffn=8192,  L=22),
+        3:  dict(d=3072, d_ffn=8192,  L=28),
+        7:  dict(d=4096, d_ffn=11008, L=32),
+        8:  dict(d=4096, d_ffn=14336, L=32),
+        13: dict(d=5120, d_ffn=13824, L=40),
+        70: dict(d=8192, d_ffn=28672, L=80),
+    }
+    s = SHAPES.get(params_b, SHAPES[7])
+    d, d_ffn, L = s['d'], s['d_ffn'], s['L']
 
+    # 1) Frozen base at NF4 = 4 bits/param = 0.5 bytes/param.
+    base_b = params_b * 1e9 * 0.5
+
+    # 2) LoRA adapter params (BF16). Each adapted projection contributes
+    #    rank * (in + out) params. QKVO are square (d->d); FFN has 3 linears
+    #    that touch d and d_ffn.
+    qkvo = 4 * rank * (d + d) * L                        # Q, K, V, O (4 per layer)
+    ffn  = 3 * rank * (d + d_ffn) * L if 'ffn' in target else 0  # gate, up, down
+    lora_params = qkvo + ffn
+    lora_b = lora_params * 2
+
+    # 3) AdamW on adapters only: m + v in BF16 (4 B) + FP32 master (4 B) = 8 B/param.
+    optim_b = lora_params * 8
+
+    # 4) Activations (Korthikanti 34*s*b*h, FlashAttention assumed; no checkpointing).
+    act_b = 34 * ctx * batch * d * L * 2
+
+    GB = 1024**3
+    total_b = base_b + lora_b + optim_b + act_b
+    return base_b/GB, lora_b/GB, optim_b/GB, act_b/GB, total_b/GB
+
+print(f"{'config':<26} {'base':>7} {'lora':>7} {'optim':>7} {'act':>7} {'total':>8}")
+print('-' * 66)
 for params, ctx, bs in [(1, 1024, 4), (7, 2048, 2), (13, 2048, 1), (70, 4096, 1)]:
-    base, lora, optim, act, total = qlora_memory_estimate(params, ctx, bs, gpu_gb=80)
-    print(f"{params:>3}B @ ctx={ctx} bs={bs}:  "
-          f"base={base:>5.1f}  lora={lora:>4.1f}  optim={optim:>4.1f}  "
-          f"act={act:>4.1f}  total≈{total:>5.1f} GB")
+    base, lora, optim, act, total = qlora_memory(params, ctx, bs)
+    print(f"{params:>3}B  ctx={ctx:<5} bs={bs:<3}    {base:>5.1f} G {lora:>5.2f} G "
+          f"{optim:>5.2f} G {act:>5.1f} G {total:>6.1f} G")
 `}
 />
 

@@ -61,7 +61,6 @@ def wsd_lr(step, warmup_steps, stable_steps, decay_steps, peak_lr, min_lr=0):
         decay_progress = (step - warmup_steps - stable_steps) / decay_steps
         decay_progress = min(decay_progress, 1.0)
         return min_lr + 0.5 * (peak_lr - min_lr) * (1 + math.cos(math.pi * decay_progress))
-    return min_lr
 ```
 
 The stable phase is the key innovation. You train at peak LR until you're satisfied with convergence, then trigger decay for the final push. DeepSeek-V3 ran 14.8T tokens at stable LR, then decayed over the final 500B.
@@ -76,11 +75,15 @@ Warmup → linear ramp down to min_lr. Simple. Often 90% as good as cosine.
 |---|---|---|---|---|---|
 | GPT-3 175B | Cosine | 375M tokens | Full cosine | 6e-5 | 300B |
 | Llama 2 70B | Cosine | 2000 steps | Full cosine | 1.5e-4 | 2T |
-| MiniCPM 2.4B | WSD | 2000 steps | 90% stable / 10% decay | 1e-2 | 1T |
+| MiniCPM 2.4B (µP) | WSD | 2000 steps | 90% stable / 10% decay | 1e-2 \* | 1T |
 | DeepSeek-V3 671B | WSD | 2000 steps | ~97% stable / ~3% decay | 2.2e-4 | 14.8T |
 | Qwen 2.5 72B | WSD | 2000 steps | ~85% stable / ~15% decay | 1.5e-4 | 18T |
 
 Notice: DeepSeek-V3 ran at peak LR for **14.3T tokens** and only decayed over the final 500B. That's the WSD philosophy — explore fully, then settle.
+
+> **\* MiniCPM's "1e-2" peak LR is a µP-parameterization artifact**, not a number you'd transfer to a non-µP run. MiniCPM uses Maximal Update Parameterization (Yang et al.), which scales each layer's effective LR by `1/width` — so the *raw* config knob is 1e-2, but the *effective* LR per parameter is closer to ~1e-3 (the same order as GPT-3 / Llama). If you copy `peak_lr=1e-2` into a vanilla AdamW run, you'll diverge immediately.
+
+
 
 ### Warmup: how much is enough?
 

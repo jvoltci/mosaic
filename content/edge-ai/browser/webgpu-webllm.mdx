@@ -7,7 +7,7 @@ last_reviewed: 2026-04-26
 
 ## TL;DR
 
-- **WebGPU** is the W3C-standard browser GPU API. Stable in Chrome 113+, Edge 113+, Safari 26+; Firefox is behind a flag. It compiles **WGSL** (a Rust-flavored shader language) to whatever the device's GPU stack speaks: Metal on Apple, D3D12 on Windows, Vulkan on everything else.
+- **WebGPU** is the W3C-standard browser GPU API. Stable in Chrome 113+, Edge 113+, Safari 18+; Firefox is behind a flag. It compiles **WGSL** (a Rust-flavored shader language) to whatever the device's GPU stack speaks: Metal on Apple, D3D12 on Windows, Vulkan on everything else.
 - **WebLLM** (`@mlc-ai/web-llm`) compiles transformers (Llama, Phi, Mistral, Gemma) to WGSL via the MLC compiler stack. The browser tab becomes the runtime. ~750 MB weights for 1B Q4F16; ~4 GB for 7B Q4F16; cached in IndexedDB.
 - **transformers.js** is the alternative — runs ONNX models via ONNX Runtime Web (WebGPU + WASM). Lower performance than WebLLM for LLMs, but a richer model zoo (BERT, CLIP, Whisper, segmentation).
 - **WebNN** is the upcoming W3C *neural network* API (not GPU shaders, NN ops). Currently shipping in Chrome 130+ on Windows + macOS. Targets the platform NPU (ANE on macOS, DirectML on Windows). Faster + more power-efficient than WebGPU for LLMs but the model coverage is still small.
@@ -107,8 +107,8 @@ The honest numbers, from MLC-LLM's own benchmarks on Llama-3.2-1B Q4F16:
 | Device | Browser | Tok/s |
 |---|---|---|
 | M2 MacBook Air | Chrome 130 | 70–80 |
-| M2 MacBook Air | Safari 17.4 | 50–60 |
-| iPhone 15 Pro | Safari 17.4 | 18–22 |
+| M2 MacBook Air | Safari 18 | 50–60 |
+| iPhone 15 Pro | Safari 18 | 18–22 |
 | Pixel 8 | Chrome 130 | 14–18 |
 | $300 Chromebook (Intel UHD) | Chrome 130 | 4–6 |
 

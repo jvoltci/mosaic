@@ -11,7 +11,7 @@ last_reviewed: 2026-04-26
 ## TL;DR
 
 - **Core ML** is Apple's on-device ML framework. Models are `.mlpackage` (the modern format, replaces `.mlmodel`). Run on CPU, GPU (via Metal), or **Apple Neural Engine** (ANE) — Apple's NPU. The framework dispatches per-op based on what the chosen compute unit can do.
-- The **Apple Neural Engine** is the silicon that Apple's iOS Intelligence runs on. ~38 TOPS on A17/M3, ~100+ TOPS on M4. Privacy-preserving (on-device, never the cloud). **Heavily optimized for transformer inference** in M3/M4 generation.
+- The **Apple Neural Engine** is the silicon that Apple's iOS Intelligence runs on. ~35 TOPS at INT8 on A17/M3, ~38 TOPS on M4. (The "100+ TOPS" you see in Apple marketing is the *full-SoC* aggregate across CPU + GPU + ANE, not the ANE alone.) Privacy-preserving (on-device, never the cloud). **Heavily optimized for transformer inference** in M3/M4 generation.
 - **`coremltools`** is the conversion toolkit: PyTorch / TensorFlow / ONNX → `.mlpackage`. The 2024+ version supports `torch.export`-shaped graphs and palettized (LUT-quantized) weights.
 - **MLX** is Apple's research-grade framework — like PyTorch but Apple-native, lazy-evaluated, runs on Apple silicon's unified memory. Used for training and prototyping; deploy via Core ML for production.
 - For 2026 iOS apps: Core ML is the path when you need ANE; ExecuTorch (with Core ML delegate) is the path when authoring fluency wins; llama.cpp is the path when binary size and ANE-independence matter.
@@ -211,7 +211,7 @@ The shape — INT4-palettized 3B as the iOS-app-bundleable sweet spot — matche
   answer="Apple Neural Engine"
   accept={["ANE", "Apple Neural Engine (ANE)", "neural engine"]}
   hint="Three letters; the chip that started shipping with the A11 (2017) and got LLM-focused in M3/M4."
-  explanation="The ANE is Apple's NPU. ~38 TOPS on A17/M3, 100+ TOPS on M4. Optimized for FP16 matmul and conv; the 2024+ generation added strong support for transformer patterns and palettized weights."
+  explanation="The ANE is Apple's NPU. ~35 TOPS on A17/M3, ~38 TOPS on M4. (Apple's '100+ TOPS' number is full-SoC aggregate, not ANE silicon.) Optimized for FP16 matmul and conv; the 2024+ generation added strong support for transformer patterns and palettized weights."
 />
 
 <Quiz

@@ -76,18 +76,28 @@ The radical move is `sign()` — every update component is ±1, scaled by the le
 Muon orthogonalizes the momentum-buffered update via a few Newton-Schulz iterations *for hidden 2D weight matrices only* (embedding and output layers stay AdamW). The intuition: gradient updates for matmul weights have a meaningful "preferred direction"; orthogonalizing the update preserves expressiveness and acts as a kind of preconditioner.
 
 ```python
-def muon_step(W, m, lr, ns_steps=5):
-    """Muon: momentum buffer + Newton-Schulz orthogonalization."""
-    update = m + g          # momentum-buffered grad
-    # Newton-Schulz iterates the matrix toward its "orthogonal" version
-    X = update / update.norm()
+def muon_step(W, m, g, lr, beta=0.95, ns_steps=5):
+    """Muon: momentum buffer + Newton-Schulz orthogonalization (Keller Jordan, 2024)."""
+    # 1) update momentum buffer in-place with new gradient
+    m.mul_(beta).add_(g)
+    # 2) start NS from the normalized momentum-buffered gradient
+    X = m / (m.norm() + 1e-7)
+    if X.shape[0] > X.shape[1]:        # work on the smaller side
+        X = X.T
+    # 3) quintic Newton-Schulz iteration. Coefficients (a, b, c) chosen so the
+    #    fixed point is X = U Vᵀ — the orthogonal polar factor of m.
+    a, b, c = 3.4445, -4.7750, 2.0315
     for _ in range(ns_steps):
         A = X @ X.T
-        B = -2.0 * A + 1.5 * (A @ A)   # quintic NS iteration
-        X = (1.5 * X) - (B @ X)
-    W -= lr * X
+        B = b * A + c * (A @ A)
+        X = a * X + B @ X
+    if m.shape[0] > m.shape[1]:
+        X = X.T
+    W.add_(X, alpha=-lr)
     return W
 ```
+
+The (3.4445, −4.7750, 2.0315) coefficients aren't tunable — they're the unique solution of a polynomial-fit problem so that 5 iterations get you to the orthogonal polar factor of `m` to ~5 decimal places (Bernstein–Newhouse 2024). Muon's whole win lives in this iteration; copying the wrong coefficients silently gives you an inferior optimizer.
 
 State: 1 buffer ($m$), like Lion. Compute: a few extra matmuls per step (the NS iterations) — meaningful but small fraction of total.
 

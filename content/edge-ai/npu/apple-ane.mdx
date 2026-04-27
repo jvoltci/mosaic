@@ -7,7 +7,7 @@ last_reviewed: 2026-04-26
 
 ## TL;DR
 
-- The **Apple Neural Engine (ANE)** is a fixed-function NPU on every iPhone since A11 (2017) and every M-series Mac. 16-core in A17/M3+, ~38 TOPS at INT8. Lives next to the CPU and GPU on the same SoC die.
+- The **Apple Neural Engine (ANE)** is a fixed-function NPU on every iPhone since A11 (2017) and every M-series Mac. 16-core in A17/M3 at ~35 TOPS (INT8); M4 bumps the same 16-core ANE to ~38 TOPS. Lives next to the CPU and GPU on the same SoC die. (When you see "100+ TOPS" in Apple marketing, that's the *full SoC* aggregate across CPU + GPU + ANE; the ANE silicon itself is ~38 TOPS.)
 - Apple does **not document the ANE op set publicly.** What runs on ANE is determined empirically — Core ML's compiler decides, you observe via Instruments.
 - ANE prefers: **convs, matmuls, FP16 attention, INT8 quantized weight-only, fixed-shape inputs**, and tensors with **fewer than 16K elements per dimension**. It rejects: dynamic shapes, exotic activations (gelu-fast variants), some attention layouts, large embedding tables.
 - Models compiled with `compute_units=ALL` automatically partition between ANE / GPU / CPU. Use `compute_units=CPU_AND_NE` to force "ANE or fail" — the right setting for benchmarking.

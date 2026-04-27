@@ -45,16 +45,22 @@ In practice many implementations use **greedy** (argmax) verification — accept
 
 ### The cost model
 
-Per "speculation round" of $K$ tokens:
+Per "speculation round" of $K$ draft tokens (Leviathan et al., 2022, §3):
 
 - 1 draft forward producing $K$ tokens: cost $\approx K \cdot c_{\text{draft}}$
 - 1 target forward over $K$ tokens: cost $\approx c_{\text{target}}$ (parallel, big-model FFN dominates)
-- Expected accepted prefix length: $\bar L = \sum_{i=1}^{K} \prod_{j \le i} \alpha$ where $\alpha$ is the acceptance probability (≈ same number of expected acceptances per step)
+- Expected accepted tokens per round (geometric prefix + bonus token from rejection sampling):
+
+  $$
+  \bar L = \frac{1 - \alpha^{K+1}}{1 - \alpha}
+  $$
+
+  where $\alpha$ is the per-position acceptance probability.
 
 Speedup vs naive ≈ $\bar L \cdot c_{\text{target}} / (c_{\text{target}} + K \cdot c_{\text{draft}})$.
 
-For a 70B target with a 1B draft and $\alpha \approx 0.7$, $K = 5$:
-- $\bar L \approx 3.0$ tokens
+For a 70B target with a 1B draft, $\alpha \approx 0.7$, $K = 5$:
+- $\bar L = (1 - 0.7^6) / (1 - 0.7) \approx 3.0$ tokens
 - speedup $\approx 3.0 \cdot c_{70B} / (c_{70B} + 5 \cdot c_{1B}) \approx 2.5×$
 
 ### The four families
@@ -106,22 +112,24 @@ EAGLE-3 is the winner on chat workloads through 2025–2026 by a clear margin.
   description="Compute expected speedup for spec decoding under various draft acceptance rates."
   code={`def speedup(K, alpha, c_draft_over_target=0.05):
     """
-    K = max speculative depth
-    alpha = per-token draft acceptance rate
-    c_draft_over_target = compute cost of one draft step relative to one target step
+    K = number of draft tokens per round
+    alpha = per-position acceptance probability
+    c_draft_over_target = cost of one draft step relative to one target step
+    Leviathan et al. 2022 §3: expected accepted tokens = (1 - alpha^(K+1)) / (1 - alpha)
+    (geometric prefix + the always-sampled bonus token).
     """
-    # Expected accepted prefix length: 1 + α + α^2 + ... + α^K
-    expected_accepted = sum(alpha ** i for i in range(1, K + 1))
-    # Total cost per round: target forward + K draft forwards
+    # Expected accepted tokens per round (geometric sum, K+1 positions: 0..K).
+    expected_accepted = (1 - alpha ** (K + 1)) / (1 - alpha) if alpha < 1 else (K + 1)
+    # Total cost per round: 1 target forward + K draft forwards.
     cost_round = 1 + K * c_draft_over_target
-    return (1 + expected_accepted) / cost_round
+    return expected_accepted / cost_round
 
-print("Speedup as a function of draft acceptance rate α (K = 5, draft = 5% of target cost):")
+print("Speedup as a function of draft acceptance rate alpha (K = 5, draft = 5% of target cost):")
 for alpha in (0.3, 0.5, 0.6, 0.7, 0.8, 0.9):
     s = speedup(K=5, alpha=alpha)
-    print(f"  α = {alpha:.1f}  ->  {s:.2f}x")
+    print(f"  alpha = {alpha:.1f}  ->  {s:.2f}x")
 
-print("\\nSpeedup as a function of K (α = 0.7):")
+print("\\nSpeedup as a function of K (alpha = 0.7):")
 for K in (1, 2, 3, 4, 5, 7, 10):
     s = speedup(K=K, alpha=0.7)
     print(f"  K = {K:>2}  ->  {s:.2f}x")

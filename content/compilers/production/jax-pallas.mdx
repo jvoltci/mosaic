@@ -93,25 +93,34 @@ import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
 
+BM, BN, BK = 128, 128, 64   # tile sizes for the matmul
+
 def matmul_kernel(x_ref, w_ref, o_ref):
-    """Inner kernel — runs once per program (block in Triton terminology)."""
-    x = x_ref[:, :]                          # load full block of x
-    w = w_ref[:, :]
-    o_ref[:, :] = pl.dot(x, w)               # one tensor-core call
+    """Inner kernel: each program computes one (BM, BN) output tile by
+    looping over K in chunks of BK and accumulating."""
+    K = x_ref.shape[1]
+    acc = jnp.zeros((BM, BN), dtype=jnp.float32)
+    for k in range(0, K, BK):
+        x_tile = pl.load(x_ref, (slice(None), pl.ds(k, BK)))   # (BM, BK)
+        w_tile = pl.load(w_ref, (pl.ds(k, BK), slice(None)))   # (BK, BN)
+        acc += jnp.dot(x_tile, w_tile, preferred_element_type=jnp.float32)
+    o_ref[:, :] = acc.astype(o_ref.dtype)
 
 @jax.jit
 def matmul(x, w):
+    M, K = x.shape
+    _, N = w.shape
     return pl.pallas_call(
         matmul_kernel,
-        out_shape=jax.ShapeDtypeStruct((x.shape[0], w.shape[1]), x.dtype),
-        grid=(x.shape[0] // 128, w.shape[1] // 128),
-        in_specs=[pl.BlockSpec((128, x.shape[1]), lambda i, j: (i, 0)),
-                  pl.BlockSpec((x.shape[1], 128), lambda i, j: (0, j))],
-        out_specs=pl.BlockSpec((128, 128), lambda i, j: (i, j)),
+        out_shape=jax.ShapeDtypeStruct((M, N), x.dtype),
+        grid=(M // BM, N // BN),                                  # one program per (M, N) tile
+        in_specs=[pl.BlockSpec((BM, K), lambda i, j: (i, 0)),     # full row strip of x
+                  pl.BlockSpec((K, BN), lambda i, j: (0, j))],    # full col strip of w
+        out_specs=pl.BlockSpec((BM, BN), lambda i, j: (i, j)),
     )(x, w)
 ```
 
-The structure is **exactly Triton's**: a kernel function operating on tile-shaped views, a grid spec, block specs that describe the slicing. The Python is JAX-flavored (uses `jax.ShapeDtypeStruct`), but the model is the same.
+The structure is **exactly Triton's**: a kernel function with an explicit K-loop accumulator, a grid spec, block specs that describe slicing. The Python is JAX-flavored (uses `jax.ShapeDtypeStruct`), but the model — outer 2D grid over (M, N) tiles, inner sequential K-loop, FP32 accumulator — matches the canonical Triton GEMM line-for-line.
 
 The gift: this same kernel runs on GPU (via Triton) and TPU (via Mosaic). On TPU you get tile sizes that map to the systolic array; on GPU you get tensor-core mma. Same source.
 

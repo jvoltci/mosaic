@@ -118,7 +118,7 @@ def run_agent(user_message: str, max_steps: int = 5) -> str:
 
     for step in range(max_steps):
         resp = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-sonnet-4-5",
             max_tokens=1024,
             tools=tools,
             messages=messages,
@@ -127,9 +127,15 @@ def run_agent(user_message: str, max_steps: int = 5) -> str:
         # Append the model's full response to the conversation
         messages.append({"role": "assistant", "content": resp.content})
 
-        # If the model didn't call any tools, we're done
-        if resp.stop_reason != "tool_use":
+        # We're done when the model finishes its turn naturally. Anthropic's
+        # stop_reason can be "end_turn", "tool_use", "max_tokens", or
+        # "stop_sequence" — only "end_turn" is "actually finished thinking".
+        # Treating "tool_use" as the only continue case (or `!= "tool_use"`
+        # as done) silently truncates on max_tokens / stop_sequence.
+        if resp.stop_reason == "end_turn":
             return next(b.text for b in resp.content if hasattr(b, "text"))
+        if resp.stop_reason != "tool_use":
+            raise RuntimeError(f"Unexpected stop_reason: {resp.stop_reason}")
 
         # Run any tool calls (potentially in parallel)
         tool_results = []

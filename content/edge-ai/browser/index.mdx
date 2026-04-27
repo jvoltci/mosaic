@@ -5,7 +5,7 @@ last_reviewed: 2026-04-26
 ---
 # Browser (WebGPU)
 
-The browser is the universal sandbox: every phone, every laptop, every Chromebook. WebGPU (stable in Chrome 113+, Safari 26+, Edge 113+) makes it real — you can compile a transformer kernel to WGSL once and have a 7B model run on a kid's $200 laptop with no install. This module covers the runtime stack and the practical limits.
+The browser is the universal sandbox: every phone, every laptop, every Chromebook. WebGPU (stable in Chrome 113+, Safari 18+, Edge 113+) makes it real — you can compile a transformer kernel to WGSL once and have a 7B model run on a kid's $200 laptop with no install. This module covers the runtime stack and the practical limits.
 
 <ModuleProgress
   lessons={[
@@ -17,7 +17,7 @@ The browser is the universal sandbox: every phone, every laptop, every Chromeboo
   title="Ship a 1B-parameter LLM that runs entirely in a browser tab"
   pitch="Static-host a chat UI on GitHub Pages. Open it on your phone. Watch a 1B model stream tokens with no server."
   what="Build a static-hosted chat app using @mlc-ai/web-llm. Quantize Llama-3.2-1B-Instruct to MLC's q4f16 format, host the weights on Cloudflare R2 (free egress), wire a 200-line chat UI, deploy to GitHub Pages. Measure tok/s on Pixel-8/iPhone-15/M2 Air. Document model load time, weight cache behavior, and steady-state perf."
-  sota={['@mlc-ai/web-llm v0.2+', 'Llama-3.2-1B-Instruct (MLC q4f16)', 'WebGPU (Chrome 113+, Safari 26+)', 'Cloudflare R2 (free CDN)', 'GitHub Pages']}
+  sota={['@mlc-ai/web-llm v0.2+', 'Llama-3.2-1B-Instruct (MLC q4f16)', 'WebGPU (Chrome 113+, Safari 18+)', 'Cloudflare R2 (free CDN)', 'GitHub Pages']}
   device="phone"
   time="One focused weekend (~10 h)"
   level="advanced"

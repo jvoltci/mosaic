@@ -133,16 +133,19 @@ The full three-stage pipeline (BM25 → dense → reranker) is the 2026 standard
 
 The Massive Text Embedding Benchmark (MTEB) leaderboard is the go-to. Top open models:
 
-| Model              | Dim    | MTEB avg | Notes                                  |
-|--------------------|---------|---------|------------------------------------------|
-| **Nomic Embed v2** | 768     | ~67     | Open, fast, Matryoshka                   |
-| **BGE-M3**         | 1024    | ~69     | Multi-functional (dense + sparse + colbert) |
-| **GTE-Qwen2-7B**   | 3584    | ~72     | Highest quality; 7B params, slower       |
-| **Stella-1.5B**    | 1536    | ~71     | Strong open with reasonable size         |
-| Voyage 3 (proprietary) | 1024 | ~70     | Production API; best ergonomics          |
-| OpenAI text-embedding-3-large | 3072 | ~67 | Default cloud option                  |
+| Model                           | Dim   | MTEB avg | Notes                                                              |
+|---------------------------------|-------|----------|--------------------------------------------------------------------|
+| **Nomic Embed v1.5**            | 768   | ~62      | Original Matryoshka; 137M params, MIT-licensed, runs anywhere      |
+| **Nomic Embed v2** (MoE)        | 768   | ~64      | 305M-param Mixture-of-Experts; multilingual; v1.5 successor (2025) |
+| **BGE-M3**                      | 1024  | ~66      | Multi-functional (dense + sparse + colbert), strong multilingual   |
+| **Stella-1.5B-v5**              | 1536  | ~71      | Strong open mid-size; non-Matryoshka                               |
+| **GTE-Qwen2-7B-instruct**       | 3584  | ~71      | Highest open MTEB; 7B params, slower / heavier                     |
+| Voyage 3 (proprietary)          | 1024  | ~70      | Production API; best ergonomics                                    |
+| OpenAI text-embedding-3-large   | 3072  | ~65      | Default cloud option                                               |
 
-**For most products: Nomic Embed v2** — small, fast, near-top quality, Matryoshka, MIT-licensed. Upgrade to BGE-M3 if multilingual; GTE-Qwen2 if you need every last MTEB point and can afford the compute.
+(MTEB averages are approximate and shift with the leaderboard; treat as ranking, not absolute.)
+
+**For most products: Nomic Embed v1.5** — 137M params, 768-dim, the model that introduced Matryoshka in this lineage and still the best small-model speed/quality trade-off. Upgrade to **Nomic v2 MoE** if you need multilingual; **BGE-M3** if you need hybrid dense+sparse; **GTE-Qwen2** if you need every last MTEB point.
 
 ### When to fine-tune
 

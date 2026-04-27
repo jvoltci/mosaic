@@ -36,13 +36,18 @@ The scale carries the dynamic range; FP8 carries the values. Together you get mo
 
 A float has three pieces: 1 sign bit, E exponent bits (with bias), M mantissa bits. Examples:
 
-| Format     | Sign | Exp | Mantissa | Bias | Max value | Min positive |
-|------------|------|-----|----------|------|-----------|--------------|
-| FP32       | 1    | 8   | 23       | 127  | ~3.4e38   | ~1.2e-38     |
-| FP16       | 1    | 5   | 10       | 15   | 65504     | ~6e-5        |
-| BF16       | 1    | 8   | 7        | 127  | ~3.4e38   | ~1.2e-38     |
-| **E4M3**   | 1    | 4   | 3        | 7    | **448**   | **2^-9 ≈ 0.002** |
-| **E5M2**   | 1    | 5   | 2        | 15   | **57344** | **2^-16**    |
+| Format        | Sign | Exp | Mantissa | Bias | Max value | Min positive |
+|---------------|------|-----|----------|------|-----------|--------------|
+| FP32          | 1    | 8   | 23       | 127  | ~3.4e38   | ~1.2e-38     |
+| FP16          | 1    | 5   | 10       | 15   | 65504     | ~6e-5        |
+| BF16          | 1    | 8   | 7        | 127  | ~3.4e38   | ~1.2e-38     |
+| **E4M3 (FN)** | 1    | 4   | 3        | 7    | **448**   | **2^-9 ≈ 0.002** |
+| **E5M2**      | 1    | 5   | 2        | 15   | **57344** | **2^-16**    |
+
+Two important caveats on the FP8 row:
+
+- **E4M3 here is "E4M3FN"** — the OCP / NVIDIA variant where the all-ones exponent encodes finite values + a single NaN, rather than IEEE-style ±∞. That extra encoding slot is why max = 448 (not 240, which is the strict-IEEE max). The H100, B200, and MI300 all use E4M3FN.
+- **E5M2 follows IEEE rules**: bias 15, ±∞ at all-ones exponent, max finite = 57344. So max = 57344 *excludes* the inf encoding; the all-ones encoding itself is reserved.
 
 Key observations:
 - **E4M3** has higher precision (3 mantissa bits → ~7 representable values per power of 2) but tiny range (±448).

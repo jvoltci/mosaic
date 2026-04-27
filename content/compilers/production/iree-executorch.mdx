@@ -46,10 +46,15 @@ The mobile-friendly successor to PyTorch Mobile. Workflow:
 ```python
 import torch
 from executorch.exir import to_edge
+from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
 
 class MyModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = torch.nn.Linear(128, 128)
+
     def forward(self, x):
-        return torch.relu(x @ self.linear.weight + self.linear.bias)
+        return torch.relu(self.linear(x))
 
 model = MyModel().eval()
 example_input = (torch.randn(1, 128),)
@@ -84,7 +89,7 @@ Workflow:
 python -c "import jax; ... export.export(my_jax_function).export_to_stablehlo()"
 
 # 2. Compile with IREE for a chosen backend.
-iree-compile --iree-hal-target-backends=cuda --iree-cuda-target=sm_90a my_model.mlirbc -o my_model.vmfb
+iree-compile --iree-hal-target-backends=cuda --iree-hal-cuda-llvm-target-arch=sm_90a my_model.mlirbc -o my_model.vmfb
 
 # 3. Run via the IREE runtime.
 iree-run-module --module=my_model.vmfb --device=cuda --function=forward --input=1x128xf32=...

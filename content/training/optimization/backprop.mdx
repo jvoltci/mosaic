@@ -45,23 +45,25 @@ The peak memory is the activation accumulation at the deepest point of the netwo
 
 ### Why activations dominate
 
-For a Transformer block:
+The clean formula (Korthikanti et al., Megatron 2022, **assuming FlashAttention** so the $N \times N$ attention-score matrix is never materialized in HBM):
 
-| Item | Per-token bytes (BF16) |
-| --- | --- |
-| Attention QKV inputs | $3 \times d \times 2$ |
-| Attention scores ($N \times N$ for sequence $N$) | $H \times N \times 2$ |
-| Attention output | $d \times 2$ |
-| FFN intermediate ($d_{\text{ffn}} = 4d$) | $4d \times 2$ |
-| Total per layer | $\sim 12d$ + $H N$ |
+$$
+\text{activation bytes per layer} \;\approx\; 34 \cdot s \cdot b \cdot h \cdot \text{(bytes/elem)}
+$$
 
-For Llama-3.1 70B ($d = 8192$, $H = 64$, $L = 80$) at $N = 8192$, batch 1:
+where $s$ = sequence length, $b$ = batch, $h$ = hidden dim. The 34 absorbs Q/K/V/O projections, the FFN intermediate (SwiGLU stores 2× inputs), layer-norm scratch, residual inputs — all the per-token tensors saved for the backward pass.
 
-> **activations** ≈ 80 × (12·8192 + 64·8192) × 8192 × 2 bytes ≈ **92 GB**
+Without FlashAttention there's also a $5 \cdot a \cdot s^2 \cdot b$ term for the score matrix; at long context that term dwarfs everything, which is exactly why Hopper-era training runs are FlashAttention-only.
 
-Compare: weights are 140 GB. Optimizer state (AdamW) adds another 280 GB. **Activations alone exceed an H100's 80 GB on a single sequence at long context.**
+For Llama-3.1 70B ($h=8192, L=80$) at $s=8192, b=1$, BF16:
 
-This is why every frontier training run uses gradient checkpointing.
+$$
+\text{activations} \;\approx\; 80 \cdot 34 \cdot 8192 \cdot 1 \cdot 8192 \cdot 2 \;\approx\; \mathbf{365\ GB}
+$$
+
+Compare: weights are 140 GB; AdamW state in FP32 adds ~280 GB. **Activations alone are 2–3× the weights at long context.** The full forward+backward state is ~785 GB — fits across an 8×H100 node only with gradient checkpointing.
+
+This is why every frontier training run uses gradient checkpointing — *not* an optimization, a feasibility requirement.
 
 ### What `.backward()` actually does (autograd in 30 lines)
 
@@ -150,34 +152,36 @@ Selective is the production sweet spot.
 
 <RunInBrowser
   description="Estimate activation memory for a Transformer training run."
-  code={`def activation_gb(L, d, ffn_mult, T, B, dtype_bytes=2, checkpoint='none'):
-    """Activation memory for a Transformer training step (Megatron-LM formula,
-    Korthikanti 2022, assuming FlashAttention so the T×T score matrix is never
-    materialized in HBM). Captures dominant terms: Q/K/V/O projections + FFN
-    intermediate. Ignores small bookkeeping (norm scratch, dropout masks)."""
-    attn_proj = 4 * d              # Q, K, V, attn-output activations
-    ffn       = 2 * ffn_mult       # FFN input + SwiGLU/GELU intermediate
-    per_layer = (attn_proj + ffn) * T * B * dtype_bytes
-    total     = L * per_layer
+  code={`def activation_gb(L, d, T, B, dtype_bytes=2, checkpoint='none'):
+    """Activation memory per training step. Korthikanti et al. (Megatron, 2022),
+    FlashAttention assumed (so the T x T score matrix is never materialized).
+    Per-layer footprint is ~34 * s * b * h * bytes; full breakdown of the 34:
+    QKV input (4h) + attention output (h) + FFN input (h) + SwiGLU expand (2*ffn)
+    + layer-norm scratch + residual paths."""
+    sbh = T * B * d * dtype_bytes        # one 's*b*h' slab in bytes
+    per_layer = 34 * sbh
+    total = L * per_layer
     if checkpoint == 'full':
-        # Save only at layer boundaries; recompute the rest. ~√L reduction.
+        # Save only at layer boundaries; recompute the rest. ~sqrt(L) reduction
+        # if checkpoints are placed evenly across L layers.
         total /= (L ** 0.5)
     elif checkpoint == 'selective':
-        # Megatron selective recomputation: keep cheap, recompute expensive. ~0.4×.
+        # Megatron selective recomputation: keep cheap, recompute expensive. ~0.4x.
         total *= 0.4
     return total / 1024**3
 
 configs = [
-    ("Llama-7B  d=4096 L=32  ffn=11k T=8K  B=1  no-ckpt",     dict(L=32, d=4096, ffn_mult=11008, T=8192, B=1, checkpoint='none')),
-    ("Llama-7B  same  selective ckpt                  ",      dict(L=32, d=4096, ffn_mult=11008, T=8192, B=1, checkpoint='selective')),
-    ("Llama-7B  same  full ckpt                       ",      dict(L=32, d=4096, ffn_mult=11008, T=8192, B=1, checkpoint='full')),
-    ("Llama-70B d=8192 L=80  ffn=28k T=8K  B=1  no-ckpt",     dict(L=80, d=8192, ffn_mult=28672, T=8192, B=1, checkpoint='none')),
-    ("Llama-70B same  selective ckpt                  ",      dict(L=80, d=8192, ffn_mult=28672, T=8192, B=1, checkpoint='selective')),
+    ("Llama-3-8B  h=4096 L=32 T=8K B=1 no-ckpt    ",  dict(L=32, d=4096, T=8192, B=1, checkpoint='none')),
+    ("Llama-3-8B  same        selective ckpt      ",  dict(L=32, d=4096, T=8192, B=1, checkpoint='selective')),
+    ("Llama-3-8B  same        full ckpt           ",  dict(L=32, d=4096, T=8192, B=1, checkpoint='full')),
+    ("Llama-3-70B h=8192 L=80 T=8K B=1 no-ckpt    ",  dict(L=80, d=8192, T=8192, B=1, checkpoint='none')),
+    ("Llama-3-70B same        selective ckpt      ",  dict(L=80, d=8192, T=8192, B=1, checkpoint='selective')),
+    ("Llama-3-70B same        full ckpt           ",  dict(L=80, d=8192, T=8192, B=1, checkpoint='full')),
 ]
-print(f"{'config':<55}  {'activations':>14}")
-print('-' * 75)
+print(f"{'config':<48}  {'activations':>14}")
+print('-' * 67)
 for label, kw in configs:
-    print(f"{label:<55}  {activation_gb(**kw):>11.2f} GB")
+    print(f"{label:<48}  {activation_gb(**kw):>11.1f} GB")
 `}
 />
 

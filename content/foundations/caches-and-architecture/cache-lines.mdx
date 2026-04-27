@@ -88,19 +88,19 @@ This is why C++ veterans always reach for `std::vector` over `std::list`. Linked
 ### Struct layout matters
 
 ```cpp
-// Bad: each iteration touches two cache lines (8 bytes value, 56 bytes padding)
+// Bad: sizeof = 80. Reading {x, y, z, mass} per step pulls TWO cache lines —
+// the cold tag/padding sits between the hot fields and pushes `mass` past byte 64.
 struct Particle {
-    double x, y, z;       // 24 bytes
-    char tag;              // 1 byte
-    char padding[39];     // 39 bytes
-    double mass;           // 8 bytes — straddles a cache line!
+    double x, y, z;       // bytes 0..23   (line 1)
+    char tag;              // byte 24
+    char padding[47];     // bytes 25..71 (cold metadata)
+    double mass;           // bytes 72..79 (line 2 — second cache miss per step)
 };
 
-// Good: hot fields packed, cold fields after
+// Good: hot fields adjacent. sizeof = 32, fits in one 64-byte line. Cold
+// metadata moves to a parallel array or a trailing struct.
 struct Particle {
-    double x, y, z, mass;  // 32 bytes — all in one cache line
-    char tag;
-    // ... cold fields ...
+    double x, y, z, mass;  // bytes 0..31 — all in one cache line
 };
 ```
 
