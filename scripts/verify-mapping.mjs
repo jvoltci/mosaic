@@ -53,7 +53,7 @@ async function* walk(dir) {
   }
 }
 const tileSlugs = new Set(tiles.map(t => t.slug))
-const TOP_LEVEL_EXEMPT = new Set(['index', 'cheatsheet', 'map', 'learning-paths', 'favorites'])
+const TOP_LEVEL_EXEMPT = new Set(['index', 'cheatsheet', 'map', 'learning-paths', 'favorites', 'reads'])
 for await (const file of walk(CONTENT)) {
   const rel = relative(CONTENT, file).replace(/\\/g, '/').replace(/\.mdx$/, '')
   // module index.mdx files are not tiles; they're module pages

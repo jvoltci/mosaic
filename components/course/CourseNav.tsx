@@ -102,6 +102,7 @@ export function CourseNav() {
           <Search />
           <Link href="/map" className="m-nav-action">Map</Link>
           <Link href="/cheatsheet" className="m-nav-action">Cheatsheet</Link>
+          <Link href="/reads" className="m-nav-action">Reads</Link>
           <Link href="/favorites" className="m-nav-action" aria-label="Saved lessons">★</Link>
           {completed > 0 && (
             <span className="m-nav-progress" title={`${completed} of ${TILES.length} lessons done`}>
@@ -142,6 +143,10 @@ export function CourseNav() {
           <Link href="/cheatsheet" className="m-nav-mobile-item">
             <span className="m-nav-mobile-num">·</span>
             <span>Cheatsheet</span>
+          </Link>
+          <Link href="/reads" className="m-nav-mobile-item">
+            <span className="m-nav-mobile-num">·</span>
+            <span>Reads</span>
           </Link>
           <Link href="/favorites" className="m-nav-mobile-item">
             <span className="m-nav-mobile-num">★</span>
