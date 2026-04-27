@@ -1,9 +1,201 @@
 ---
 title: torch.compile (Inductor)
 description: Dynamo + AOTAutograd + Inductor — the daily-driver compiler that 80% of PyTorch users now run without realizing it.
-last_reviewed: 2026-04-26
+last_reviewed: 2026-04-27
 ---
+
 # torch.compile (Inductor)
+
+<Mode is="learn">
+
+If you train or serve PyTorch models in 2026, your code is probably running through a compiler — even if you didn't ask for one. `torch.compile(model)` is on by default in many training stacks, and almost every commercial PyTorch deployment in production today is going through <Term name="inductor">Inductor</Term> whether the team realized it or not. It's the most-deployed AI compiler in 2026 by orders of magnitude.
+
+The pipeline has four stages, each addressing one of PyTorch's eager-mode pain points. <Term name="dynamo">**Dynamo**</Term> hooks into CPython's bytecode evaluation to capture graphs from arbitrary Python code. **AOTAutograd** lifts the dynamic backward pass into a static joint forward-backward graph. **Inductor** does <Term name="fusion">operator fusion</Term> and emits <Term name="triton">Triton</Term> kernels for GPU + C++ for CPU. **<Term name="cuda graph">CUDA Graphs</Term>** captures the whole step's launches and replays them with one CPU API call. Together: **1.3–2× speedup on training, 1.5–4× on inference**, mostly free.
+
+This lesson is what each stage actually does, what blocks the speedup, and how to debug when `torch.compile` doesn't help as much as you expected.
+
+## TL;DR
+
+- `torch.compile(model)` swaps PyTorch's eager execution for **graph capture (Dynamo) + autograd compilation (AOTAutograd) + kernel codegen (Inductor)**.
+- **Dynamo** captures Python-level graphs by hooking into bytecode evaluation, falling back gracefully when it can't trace.
+- **AOTAutograd** lifts the Python autograd into a static forward+backward joint graph that the compiler can optimize together.
+- **Inductor** lowers the graph to **Triton kernels** for GPU and **C++ + OpenMP** for CPU. Fuses pointwise ops aggressively.
+- **Real-world wins:** **1.3–2× speedup on training**, **1.5–4× on inference**, mostly from kernel fusion and CUDA Graph capture. The default in PyTorch 2.5+.
+
+## Mental model
+
+```mermaid
+flowchart LR
+  PY[Python module: forward()] --> Dynamo
+  subgraph PT2["torch.compile pipeline"]
+    Dynamo[Dynamo: bytecode-level graph capture] --> AOT[AOTAutograd: lift autograd to static fwd+bwd graph]
+    AOT --> Inductor[Inductor: fusion + codegen]
+    Inductor --> TK[Triton kernels for GPU]
+    Inductor --> CK[C++ kernels for CPU]
+    Inductor --> CG[CUDA graph capture]
+  end
+  TK --> RUN[Compiled binary]
+  CK --> RUN
+  CG --> RUN
+```
+
+Four compilation stages, each addressing one of PyTorch's eager-mode pain points: capture (Dynamo), autograd (AOT), codegen (Inductor), kernel launch overhead (CUDA Graphs).
+
+## Stage 1: Dynamo — graph capture from Python bytecode
+
+The hardest part of compiling PyTorch is that user code is *Python*, with arbitrary control flow, dictionary lookups, and dynamic shapes. Dynamo solves this by hooking into CPython's frame evaluation API and **rewriting bytecode on the fly**:
+
+- For each `forward()` call, Dynamo runs the Python function and traces tensor ops into an FX graph.
+- When it hits Python code it can't trace (a `print`, a non-tensor branch), it inserts a **graph break**, runs the un-traceable bit in eager mode, then resumes tracing on the next tensor op.
+- The captured graph is **canonical** — same code runs same graph regardless of Python conditionals on tensor data.
+
+```python
+@torch.compile
+def f(x):
+    if x.sum() > 0:        # tensor predicate — graph break here, both branches traced
+        return x * 2
+    return x + 1
+
+# Dynamo emits two graphs (the two branches) and dispatches based on the actual tensor predicate at runtime
+```
+
+This works far better than the previous `torch.jit.trace` (which silently traced one path and missed conditionals) or `torch.jit.script` (which required rewriting code to a Python subset).
+
+## Stage 2: AOTAutograd — joint forward+backward
+
+Eager-mode autograd records the backward graph **dynamically during the forward pass** — fine for flexibility, terrible for compilers that want to optimize forward and backward together (so they can fuse a forward op with the activation it would have saved for backward).
+
+AOTAutograd traces the forward and produces the **functionalized joint graph** (forward + backward together) **ahead of time**. Inductor then optimizes the whole thing.
+
+This is why `torch.compile` speeds up *training* and not just inference — most of the wins live in fusing forward and backward together.
+
+## Stage 3: Inductor — fusion and codegen
+
+Inductor's job: take the graph, fuse what's fusible, emit kernels.
+
+```text
+Input graph:
+  y = (x + bias).relu()
+  z = y * weight
+
+Naive eager: 3 kernels (add, relu, mul) — 3 reads + 3 writes from HBM.
+Inductor:    1 fused kernel — 1 read of x + bias + weight, 1 write of z.
+```
+
+Pointwise ops are fused aggressively. Reductions and matmuls are kept separate (those have different optimization regimes). On GPU, Inductor emits **Triton** for fused pointwise/reduction kernels and falls back to cuBLAS/CUTLASS for GEMM. On CPU, it emits C++ with OpenMP.
+
+You can dump the generated code:
+
+```bash
+TORCH_LOGS=output_code python train.py
+```
+
+This dumps every Triton kernel Inductor generated. Best way to learn Inductor: read its output.
+
+## Stage 4: CUDA Graph capture
+
+Even after fusion, **launching** small kernels has overhead — each `cudaLaunchKernel` is ~5–10 µs. For a model with 100 small kernels per step, that's 1 ms of pure launch overhead per step.
+
+`torch.compile(mode="reduce-overhead")` or `mode="max-autotune"` enables CUDA graph capture: the whole step's launches are recorded once into a graph, then *replayed* with one CPU API call. Eliminates launch overhead at the cost of static input shapes.
+
+## Real numbers — Llama-3.1 8B inference, RTX 4090
+
+| Mode | tok/s (decode) | Speedup |
+| --- | --- | --- |
+| Eager PyTorch | 32 | 1.0× |
+| `torch.compile` (default) | 51 | 1.6× |
+| `torch.compile(mode="reduce-overhead")` | 68 | 2.1× |
+| `torch.compile(mode="max-autotune")` | 75 | 2.3× |
+
+`max-autotune` runs Inductor's autotuner over GEMM tile shapes — adds compile time (a minute or two) but finds better kernels.
+
+## What torch.compile won't do
+
+- **Won't fuse across function-call boundaries** that involve non-tensor Python (graph breaks).
+- **Won't fix bad data layouts** — if your model's tensors are non-contiguous, Inductor produces non-contiguous-friendly kernels but they're still slower than contiguous.
+- **Won't replace specialized kernels** — FlashAttention-3, Paged-Attention, custom Triton blow past Inductor's defaults on attention. Inductor will use them if they're available; otherwise it generates baseline kernels.
+- **Won't accelerate dynamic-shape-heavy workloads** — extreme shape variance triggers re-compilation. Use `dynamic=True` or hard-code padding.
+
+## Run it in your browser — see fusion shrink kernel count
+
+<RunInBrowser
+  description="Build a tiny graph, simulate Inductor's pointwise fusion, count the kernels."
+  code={`# A simulated mini-Inductor: fuse all pointwise ops into runs
+ops = [
+    ("matmul", "GEMM"),                  # not fusable into pointwise
+    ("add",    "pointwise"),
+    ("relu",   "pointwise"),
+    ("matmul", "GEMM"),
+    ("mul",    "pointwise"),
+    ("sigmoid","pointwise"),
+    ("mul",    "pointwise"),
+    ("matmul", "GEMM"),
+]
+
+def fuse(ops):
+    fused, current = [], []
+    for name, kind in ops:
+        if kind == "pointwise":
+            current.append(name)
+        else:
+            if current: fused.append(("fused_" + "_".join(current), "fused-pointwise"))
+            current = []
+            fused.append((name, kind))
+    if current: fused.append(("fused_" + "_".join(current), "fused-pointwise"))
+    return fused
+
+eager = ops
+fused = fuse(ops)
+print(f"Eager: {len(eager)} kernels")
+for n, k in eager: print(f"  - {n} ({k})")
+print(f"\\nInductor-fused: {len(fused)} kernels")
+for n, k in fused: print(f"  - {n} ({k})")
+print(f"\\nKernel count reduction: {len(eager)} -> {len(fused)} ({100*(1-len(fused)/len(eager)):.0f}% fewer)")
+`}
+/>
+
+Inductor in production does much more sophisticated fusion (reductions, layout transformations, etc.), but the pattern — group pointwise runs into single fused kernels — is the heart of the win.
+
+## Quick check
+
+<Quiz
+  question="You add `torch.compile(model)` to a Llama-class model and see only ~10% speedup, far less than expected. What's the most likely cause?"
+  options={[
+    'You\'re running on CPU.',
+    'Your model uses FlashAttention via SDPA — Inductor was already calling that kernel; the remaining gains are limited to non-attention ops.',
+    'torch.compile doesn\'t support transformers.',
+    'Your batch size is too large.',
+  ]}
+  answer={1}
+  explanation="On a Transformer, attention is ~30-50% of the compute, and `torch.nn.functional.scaled_dot_product_attention` already dispatches to FlashAttention in modern PyTorch. So torch.compile's potential gains are concentrated in the FFN and pointwise ops — meaningful but smaller than the headline 2× number you'd get on a non-attention model. To get more, try `mode='reduce-overhead'` (CUDA graphs) or check if your attention is using SDPA."
+/>
+
+## Key takeaways
+
+1. **`torch.compile` is the daily-driver ML compiler in 2026.** Default in PyTorch 2.5+; production-validated.
+2. **Dynamo + AOTAutograd + Inductor + CUDA Graphs** — four stages, each addressing a different eager-mode pain point.
+3. **The wins are real but uneven.** 1.3–2× on training, 1.5–4× on inference, depending on how much eager mode was leaving on the table.
+4. **`mode="reduce-overhead"` and `mode="max-autotune"` exist** — try them; modest extra compile time, often noticeable extra speedup.
+5. **Read Inductor's output** with `TORCH_LOGS=output_code` — it's the best way to learn how the compiler thinks.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'paper', href: 'https://dl.acm.org/doi/abs/10.1145/3620665.3640366', title: 'PyTorch 2: Faster Machine Learning Through Dynamic Python Bytecode Transformation', author: 'Ansel et al. (Meta, ASPLOS 2024)', note: 'The PyTorch 2 paper. Authoritative reference for Dynamo + AOT + Inductor.' },
+    { kind: 'docs', href: 'https://pytorch.org/docs/stable/torch.compiler.html', title: 'PyTorch — torch.compiler docs', note: 'Operational reference. Modes, options, troubleshooting.' },
+    { kind: 'blog', href: 'https://www.thonking.ai/p/whats-up-with-pytorch-20', title: 'Horace He — What\'s up with PyTorch 2.0', note: 'The PyTorch core dev who built much of this writing about how it works.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=egZB5Uxki0I', title: 'Edward Yang — Inside Inductor', author: 'Edward Yang (PyTorch core)', note: 'Authoritative talk on what Inductor actually does.' },
+    { kind: 'docs', href: 'https://pytorch.org/docs/stable/torch.compiler_troubleshooting.html', title: 'PyTorch — torch.compile troubleshooting', note: 'When it doesn\'t speed up, this page is the first stop.' },
+    { kind: 'repo', href: 'https://github.com/pytorch/pytorch/tree/main/torch/_inductor', title: 'pytorch/_inductor source', note: 'The actual codegen. Read `lowering.py` and the Triton template files.' },
+    { kind: 'blog', href: 'https://pytorch.org/blog/training-using-float8-fsdp2/', title: 'PyTorch Blog — torch.compile + FSDP2 + Float8', note: 'How torch.compile composes with the rest of the modern training stack.' },
+    { kind: 'docs', href: 'https://triton-lang.org/', title: 'Triton documentation', note: 'The DSL Inductor codegens to. Worth understanding once.' },
+  ]}
+/>
+
+</Mode>
+
+<Mode is="reference">
 
 ## TL;DR
 
@@ -189,5 +381,7 @@ Inductor in production does much more sophisticated fusion (reductions, layout t
     { kind: 'docs', href: 'https://triton-lang.org/', title: 'Triton documentation', note: 'The DSL Inductor codegens to. Worth understanding once.' },
   ]}
 />
+
+</Mode>
 
 <LessonComplete />
