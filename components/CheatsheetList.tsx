@@ -9,6 +9,7 @@ const TRACK_LABELS: Record<string, string> = {
   'llm-architecture': '04 · LLM Architecture',
   compilers: '05 · ML Compilers & Hardware',
   applied: '06 · Applied AI · Build & Ship',
+  'edge-ai': '07 · Edge AI',
 }
 
 /**
@@ -50,10 +51,18 @@ function renderInline(text: string): React.ReactNode {
     } else {
       const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok)
       if (linkMatch) {
+        const href = linkMatch[2]
+        const isExternal = /^https?:\/\//.test(href)
         parts.push(
-          <a key={parts.length} href={linkMatch[2]}>
-            {linkMatch[1]}
-          </a>,
+          isExternal ? (
+            <a key={parts.length} href={href} target="_blank" rel="noreferrer">
+              {linkMatch[1]}
+            </a>
+          ) : (
+            <Link key={parts.length} href={href}>
+              {linkMatch[1]}
+            </Link>
+          ),
         )
       } else {
         parts.push(tok)

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useProgress } from '../lib/use-progress'
 
 type Lesson = { slug: string; title: string; estMin?: number }
@@ -41,7 +42,7 @@ export function ModuleProgress({ lessons }: { lessons: Lesson[] }) {
           const isDone = done.has(l.slug)
           return (
             <li key={l.slug} className="m-module-progress-item">
-              <a href={l.slug} className="m-module-progress-link">
+              <Link href={l.slug} className="m-module-progress-link">
                 <span
                   aria-hidden
                   className={`m-module-progress-check ${isDone ? 'is-done' : ''}`}
@@ -54,7 +55,7 @@ export function ModuleProgress({ lessons }: { lessons: Lesson[] }) {
                 {l.estMin && (
                   <span className="m-module-progress-est">{l.estMin} min</span>
                 )}
-              </a>
+              </Link>
             </li>
           )
         })}

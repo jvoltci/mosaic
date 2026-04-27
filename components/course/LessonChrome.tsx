@@ -30,7 +30,7 @@ export function LessonChrome({ pathname, children }: Props) {
           {TRACK_LABELS[tile.track]}
         </Link>
         <span aria-hidden className="m-lesson-bc-sep">/</span>
-        <Link href={`/${moduleSlug}`} className="m-lesson-bc-module">
+        <Link href={moduleSlug} className="m-lesson-bc-module">
           {tile.moduleName}
         </Link>
         <span aria-hidden className="m-lesson-bc-sep">/</span>
@@ -72,7 +72,7 @@ export function LessonChrome({ pathname, children }: Props) {
             <span aria-hidden>{TRACK_NUM[tile.track]}</span>
             <Link href={`/${tile.track}`}>{TRACK_LABELS[tile.track]}</Link>
             <span className="m-lesson-track-dot">·</span>
-            <Link href={`/${moduleSlug}`}>{tile.moduleName}</Link>
+            <Link href={moduleSlug}>{tile.moduleName}</Link>
           </span>
           <Link href="/map" className="m-lesson-track-map">
             See the full course map →
