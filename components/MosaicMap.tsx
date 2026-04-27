@@ -6,7 +6,6 @@ import { TILES, TRACK_ACCENT, TRACK_NUM, TRACK_LABELS, type Tile, type TrackKey 
 import { axialToPixel, hexPath, bounds } from '../lib/hex'
 import { useProgress } from '../lib/use-progress'
 import { illustrationFor } from './tiles'
-import { LessonGlyph } from './tiles/LessonGlyph'
 
 type Variant = 'landing' | 'map' | 'cheatsheet'
 type Props = {
@@ -161,7 +160,6 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
                     <path d={hexPath(0, 0, hexSize)} className="m-mtile-hex" />
                     <g className="m-mtile-art" pointerEvents="none">
                       <Illustration color={isCompleted ? accent : 'var(--m-fg)'} size={hexSize} />
-                      <LessonGlyph slug={tile.slug} color={isCompleted ? accent : 'var(--m-fg)'} size={hexSize} />
                     </g>
                     {isCompleted && (
                       <g

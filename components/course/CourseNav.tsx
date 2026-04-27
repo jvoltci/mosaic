@@ -56,13 +56,17 @@ export function CourseNav() {
   useEffect(() => setMenuOpen(false), [pathname])
 
   return (
-    <nav className={`m-nav ${scrolled ? 'is-scrolled' : ''} ${hidden ? 'is-hidden' : ''}`}>
+    <>
+      {/* Reading-progress line — rendered as a sibling of the nav so its
+          position:fixed is relative to the viewport, not to the (possibly
+          translated/hidden) nav container. */}
       <span
         className="m-nav-progress-line"
         style={{ transform: `scaleX(${progress})` }}
         aria-hidden
       />
-      <div className="m-nav-inner">
+      <nav className={`m-nav ${scrolled ? 'is-scrolled' : ''} ${hidden ? 'is-hidden' : ''}`}>
+        <div className="m-nav-inner">
         <Link href="/" className="m-nav-brand" aria-label="Mosaic — home">
           Mosaic
         </Link>
@@ -135,7 +139,8 @@ export function CourseNav() {
           </Link>
         </div>
       )}
-    </nav>
+      </nav>
+    </>
   )
 }
 

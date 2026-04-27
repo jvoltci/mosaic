@@ -5,11 +5,24 @@ import { useCallback, useEffect, useState } from 'react'
 const KEY = 'mosaic:completed'
 const EVENT = 'mosaic:progress'
 
+/**
+ * Normalize a slug to the canonical form used by mosaic-tiles.ts:
+ * leading slash, no trailing slash. Without this, `usePathname()` returns
+ * `/foo/bar/` (because next.config has `trailingSlash: true`) but
+ * `tile.slug` is `/foo/bar` — and `Set.has()` would silently always miss.
+ */
+function normalize(slug: string): string {
+  if (!slug) return '/'
+  const stripped = slug.replace(/\/+$/, '')
+  return stripped || '/'
+}
+
 function load(): Set<string> {
   if (typeof window === 'undefined') return new Set()
   try {
     const raw = localStorage.getItem(KEY)
-    return new Set(raw ? JSON.parse(raw) : [])
+    const arr: string[] = raw ? JSON.parse(raw) : []
+    return new Set(arr.map(normalize))
   } catch {
     return new Set()
   }
@@ -35,14 +48,15 @@ export function useProgress() {
   }, [])
 
   const toggle = useCallback((slug: string) => {
+    const key = normalize(slug)
     const next = load()
-    if (next.has(slug)) next.delete(slug)
-    else next.add(slug)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
     persist(next)
     setCompleted(new Set(next))
   }, [])
 
-  const isDone = useCallback((slug: string) => completed.has(slug), [completed])
+  const isDone = useCallback((slug: string) => completed.has(normalize(slug)), [completed])
 
   return { completed, toggle, isDone }
 }
