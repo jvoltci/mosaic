@@ -29,6 +29,18 @@
   --m-nav-h: 56px;
   --m-content-max: 44rem;
 
+  /* Mermaid diagram palette — flips with theme so light mode stops rendering
+     dark-on-dark blocks. Used by the .m-mermaid svg !important rules below. */
+  --m-mermaid-node-fill: #1a1a24;
+  --m-mermaid-node-stroke: rgba(245, 243, 238, 0.35);
+  --m-mermaid-cluster-fill: rgba(245, 243, 238, 0.03);
+  --m-mermaid-cluster-stroke: rgba(245, 243, 238, 0.15);
+  --m-mermaid-edge: rgba(245, 243, 238, 0.4);
+  --m-mermaid-arrow: rgba(245, 243, 238, 0.55);
+  --m-mermaid-actor-stroke: rgba(245, 243, 238, 0.4);
+  --m-mermaid-actor-line: rgba(245, 243, 238, 0.2);
+  --m-mermaid-message: rgba(245, 243, 238, 0.45);
+
   color-scheme: dark;
 }
 
@@ -51,6 +63,18 @@ html.light {
   --m-track-compilers: #3d6ba8;
   --m-track-applied: #2f7d72;
   --m-track-edge-ai: #4f7338;
+
+  /* Mermaid in light mode: light-on-dark inverted — node fill = paper-soft,
+     strokes / edges / labels in dark ink. */
+  --m-mermaid-node-fill: #f3f0e9;
+  --m-mermaid-node-stroke: rgba(26, 26, 36, 0.4);
+  --m-mermaid-cluster-fill: rgba(26, 26, 36, 0.04);
+  --m-mermaid-cluster-stroke: rgba(26, 26, 36, 0.2);
+  --m-mermaid-edge: rgba(26, 26, 36, 0.5);
+  --m-mermaid-arrow: rgba(26, 26, 36, 0.6);
+  --m-mermaid-actor-stroke: rgba(26, 26, 36, 0.4);
+  --m-mermaid-actor-line: rgba(26, 26, 36, 0.25);
+  --m-mermaid-message: rgba(26, 26, 36, 0.55);
 
   color-scheme: light;
 }
@@ -1745,19 +1769,21 @@ body {
   background: transparent !important;
 }
 
-/* Re-color Mermaid SVG output */
+/* Re-color Mermaid SVG output. All values come from theme-aware --m-mermaid-*
+   tokens defined at the top of this file, so the same rules render correctly
+   in both dark and light modes. */
 .m-mermaid svg .node rect,
 .m-mermaid svg .node polygon,
 .m-mermaid svg .node circle,
 .m-mermaid svg .node ellipse,
 .m-mermaid svg .node path {
-  fill: #1a1a24 !important;
-  stroke: rgba(245, 243, 238, 0.35) !important;
+  fill: var(--m-mermaid-node-fill) !important;
+  stroke: var(--m-mermaid-node-stroke) !important;
   stroke-width: 1.2 !important;
 }
 .m-mermaid svg .cluster rect {
-  fill: rgba(245, 243, 238, 0.03) !important;
-  stroke: rgba(245, 243, 238, 0.15) !important;
+  fill: var(--m-mermaid-cluster-fill) !important;
+  stroke: var(--m-mermaid-cluster-stroke) !important;
   stroke-dasharray: 3 3 !important;
 }
 .m-mermaid svg .nodeLabel,
@@ -1781,29 +1807,29 @@ body {
 }
 .m-mermaid svg .edgePath path,
 .m-mermaid svg .flowchart-link {
-  stroke: rgba(245, 243, 238, 0.4) !important;
+  stroke: var(--m-mermaid-edge) !important;
   stroke-width: 1.4 !important;
   fill: none !important;
 }
 .m-mermaid svg .arrowheadPath,
 .m-mermaid svg marker path {
-  fill: rgba(245, 243, 238, 0.55) !important;
-  stroke: rgba(245, 243, 238, 0.55) !important;
+  fill: var(--m-mermaid-arrow) !important;
+  stroke: var(--m-mermaid-arrow) !important;
 }
 .m-mermaid svg .messageText {
   fill: var(--m-fg) !important;
   font-family: var(--font-sans), system-ui, sans-serif !important;
 }
 .m-mermaid svg .actor {
-  fill: #1a1a24 !important;
-  stroke: rgba(245, 243, 238, 0.4) !important;
+  fill: var(--m-mermaid-node-fill) !important;
+  stroke: var(--m-mermaid-actor-stroke) !important;
 }
 .m-mermaid svg .actor-line {
-  stroke: rgba(245, 243, 238, 0.2) !important;
+  stroke: var(--m-mermaid-actor-line) !important;
 }
 .m-mermaid svg .messageLine0,
 .m-mermaid svg .messageLine1 {
-  stroke: rgba(245, 243, 238, 0.45) !important;
+  stroke: var(--m-mermaid-message) !important;
 }
 
 /* ============================================================

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Mosaic">
+  <rect width="64" height="64" rx="12" fill="#0a0a0f"/>
+  <!-- Outer hexagonal tile in brand gold -->
+  <polygon points="32,8 53,20 53,44 32,56 11,44 11,20"
+           fill="none" stroke="#f2cc8f" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- Inner hex filled in brand terracotta — recognizable at 16px -->
+  <polygon points="32,20 42,26 42,38 32,44 22,38 22,26"
+           fill="#e07a5f"/>
+</svg>

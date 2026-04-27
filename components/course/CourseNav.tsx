@@ -59,12 +59,22 @@ export function CourseNav() {
     <>
       {/* Reading-progress line — rendered as a sibling of the nav so its
           position:fixed is relative to the viewport, not to the (possibly
-          translated/hidden) nav container. */}
-      <span
-        className="m-nav-progress-line"
-        style={{ transform: `scaleX(${progress})` }}
-        aria-hidden
-      />
+          translated/hidden) nav container. Color tracks the current section so
+          a foundations lesson reads in terracotta, compilers in indigo, etc. */}
+      {(() => {
+        const trackKey = TRACK_ORDER.find((k) => pathname.startsWith(`/${k}`))
+        const accent = trackKey ? TRACK_ACCENT[trackKey] : undefined
+        return (
+          <span
+            className="m-nav-progress-line"
+            style={{
+              transform: `scaleX(${progress})`,
+              ...(accent ? { background: accent } : {}),
+            }}
+            aria-hidden
+          />
+        )
+      })()}
       <nav className={`m-nav ${scrolled ? 'is-scrolled' : ''} ${hidden ? 'is-hidden' : ''}`}>
         <div className="m-nav-inner">
         <Link href="/" className="m-nav-brand" aria-label="Mosaic — home">
