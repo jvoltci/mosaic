@@ -71,3 +71,65 @@ Memory bandwidth, not compute, is the bottleneck for most LLM inference. Quantiz
     'A demo video that\'s genuinely fun to show people',
   ]}
 />
+
+---
+
+**Going for an inference-systems role instead of edge?** Same module, different artifact — implement the quantization itself, on cloud GPU + your Mac:
+
+<Capstone
+  title="W4 quantization on Llama-3-8B — from scratch, cloud + Mac"
+  pitch="Llama-3-8B quantized to 4 bits with your own kernel — benchmarked against bitsandbytes, AWQ, and GPTQ on H100, then ported to MLX and run on your MacBook. The portfolio piece every inference team wants to see."
+  what="A repo with: (1) your from-scratch W4A16 group-wise quantization in PyTorch, (2) a `QuantLinear` that drops into Llama-3-8B, (3) benchmarks vs bitsandbytes / AWQ / GPTQ on memory, throughput, and MMLU, (4) a port of the same weights to MLX with Mac M-series numbers."
+  sota={['PyTorch 2.x', 'Llama-3-8B-Instruct', 'bitsandbytes (NF4)', 'AWQ', 'GPTQ', 'MLX (Apple Silicon)', 'lm-evaluation-harness for MMLU']}
+  device="cloud H100 + Mac (Apple Silicon)"
+  time="Five focused weeks (~80 h)"
+  level="frontier"
+  steps={[
+    {
+      title: 'Read the prior art — one page of notes per scheme',
+      goal: 'Read LLM.int8(), GPTQ, AWQ, SmoothQuant. One page of notes per paper: what they quantize (W vs A), how they pick scales, what their accuracy claim is, what their runtime cost is.',
+      checkpoint: 'Four one-page notes. You can answer: why does AWQ beat RTN, why does GPTQ need calibration data, why does SmoothQuant migrate activation outliers into weights.',
+      est: '6 h',
+    },
+    {
+      title: 'RTN + group-wise INT4 in pure PyTorch',
+      goal: 'Round-to-nearest with a per-group (group_size=128) scale and zero-point. Pack two int4 values per int8 byte. Write `quantize(weight) -> (qweight, scale, zero)` and `dequantize(...) -> weight`. Round-trip relative L2 error < 1%.',
+      checkpoint: 'A 1024×1024 FP16 weight survives quant→dequant with relative L2 error under 1%.',
+      trap: 'Off-by-one in group boundaries silently corrupts the last group. Test with a non-divisible row size (e.g. 1023) — most bugs surface there.',
+      est: '8 h',
+    },
+    {
+      title: 'QuantLinear that drops into Llama-3-8B',
+      goal: 'Write `QuantLinear(nn.Module)` that holds packed int4 weights + scales + zeros, dequantizes to FP16 inside `forward`, and matmuls. Replace every `nn.Linear` in the attention and MLP blocks. Verify generation reads coherently on 5 prompts.',
+      checkpoint: 'Quantized model peak GPU memory ~5 GB (vs ~16 GB FP16). Sample generations on 5 prompts read fluently.',
+      trap: 'Quantizing `lm_head` and the embeddings tanks quality. Skip them deliberately — keep them FP16.',
+      est: '10 h',
+    },
+    {
+      title: 'Benchmark harness — memory, throughput, accuracy',
+      goal: 'Three measurements: (1) `torch.cuda.max_memory_allocated()` after first forward, (2) tokens/sec at batch 1 / 8 / 32 with seq_len 2048, (3) MMLU 5-shot via lm-evaluation-harness. Five rows: FP16, your INT4, NF4 (bitsandbytes), AWQ, GPTQ.',
+      checkpoint: 'Five rows × three columns of honest numbers. Your INT4 will likely lose 1–3 MMLU points to AWQ — report it, do not hide it.',
+      trap: 'A tiny eval subset (`limit=10`) gives noisy MMLU. Use the full dev set or do not report a number.',
+      est: '12 h',
+    },
+    {
+      title: 'Port to MLX and run on your Mac',
+      goal: 'Convert your packed INT4 weights to `mlx.core.array`. Build the same `QuantLinear` in MLX. Generate on the Mac. Measure tokens/sec and active memory.',
+      checkpoint: 'Llama-3-8B-Instruct INT4 generates on a 24 GB Mac at ~10–25 tok/s. Same model on H100 at ~80–120 tok/s. Both numbers in the README.',
+      trap: 'MLX uses unified memory — CUDA-style `max_memory_allocated` does not apply. Use `mlx.core.metal.get_active_memory()`.',
+      est: '12 h',
+    },
+    {
+      title: 'Plots + blog + ship',
+      goal: 'Four plots: (a) memory bar, (b) tokens/sec at batch 1/8/32, (c) MMLU bar, (d) accuracy-vs-memory Pareto. README with reproduction commands. Blog post (~2000 words) walking through one surprising finding. Cross-post on Hugging Face blog. Twitter thread with one chart per tweet.',
+      checkpoint: 'Repo public, blog live, four plots embedded, reproduction works on a fresh H100 box and on a fresh Mac.',
+      est: '12 h',
+    },
+  ]}
+  outcomes={[
+    'A from-scratch W4 quantization that drops into a real model — not a wrapper around bitsandbytes',
+    'Honest, side-by-side numbers vs the four production-grade alternatives — the artifact every inference recruiter actually reads',
+    'Cross-platform numbers (cloud H100 + Mac) in one repo — a differentiator most candidates do not have',
+    'A reproducible benchmark methodology (memory, throughput, accuracy) you can reuse for any future kernel work',
+  ]}
+/>
