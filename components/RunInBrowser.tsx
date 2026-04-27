@@ -12,7 +12,32 @@ declare global {
     loadPyodide?: (opts?: { indexURL?: string }) => Promise<unknown>
     __mosaicPyodide?: unknown
     __mosaicPyodidePromise?: Promise<unknown>
+    __mosaicPyodideLoaded?: Set<string>
   }
+}
+
+// Pyodide ships a package index but doesn't load any of them by default. To
+// avoid `ModuleNotFoundError` when a snippet does `import numpy`, we scan the
+// snippet for top-level imports and `loadPackage` anything Pyodide knows.
+//
+// This list is the subset of Pyodide-shipping packages we use in lessons.
+// Add more here as they show up; non-listed packages skip the loader (so a
+// snippet that imports `torch` will still error — Pyodide doesn't have torch).
+const PYODIDE_PACKAGES = new Set([
+  'numpy', 'scipy', 'sympy', 'networkx',
+  'matplotlib', 'pandas', 'micropip',
+  'regex', 'pyyaml', 'lxml',
+])
+
+function detectImports(code: string): string[] {
+  const found = new Set<string>()
+  // Match `import X` and `from X import …`. Top-level X only (we don't follow
+  // `import X as Y` → still grabs X).
+  const re = /^[ \t]*(?:import|from)[ \t]+([a-zA-Z_][a-zA-Z0-9_]*)/gm
+  for (const m of code.matchAll(re)) {
+    if (PYODIDE_PACKAGES.has(m[1])) found.add(m[1])
+  }
+  return [...found]
 }
 
 const PYODIDE_VERSION = 'v0.26.4'
@@ -96,6 +121,16 @@ export function RunInBrowser({
         setStderr: (opts: { batched: (s: string) => void }) => void
         globals: { get: (k: string) => unknown; set: (k: string, v: unknown) => void }
         toPy: (obj: unknown) => unknown
+        loadPackage: (names: string[]) => Promise<unknown>
+      }
+
+      // Lazy-load any Pyodide-shipping packages this snippet imports.
+      const needed = detectImports(currentCode)
+      const loaded = (window.__mosaicPyodideLoaded ||= new Set())
+      const missing = needed.filter((n) => !loaded.has(n))
+      if (missing.length > 0) {
+        await py.loadPackage(missing)
+        for (const n of missing) loaded.add(n)
       }
 
       let buf = ''
@@ -313,12 +348,10 @@ export function RunInBrowser({
       </div>
 
       {(output || error) && (
-        <pre
-          ref={outputRef}
-          className={`m-run-output ${error ? 'is-error' : ''}`}
-        >
-          {error ?? output}
-        </pre>
+        <div className={`m-run-output-block ${error ? 'is-error' : ''}`}>
+          <div className="m-run-output-label">{error ? 'Error' : 'Output'}</div>
+          <pre ref={outputRef} className="m-run-output">{error ?? output}</pre>
+        </div>
       )}
     </div>
   )
