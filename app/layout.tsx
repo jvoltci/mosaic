@@ -37,19 +37,19 @@ const jetbrains = JetBrains_Mono({
 })
 
 export const metadata = {
-  title: { default: 'Mosaic — A free course on AI Systems & ML Compilers', template: '%s · Mosaic' },
+  title: { default: 'Mosaic — AI Systems & ML Compilers', template: '%s · Mosaic' },
   description:
     'A free, self-paced, beautiful course on AI Systems, ML Compilers, and AI Architectures. Build cutting-edge AI things you can run on your phone.',
   openGraph: {
     type: 'website',
     siteName: 'Mosaic',
-    title: 'Mosaic — A free course on AI Systems & ML Compilers',
+    title: 'Mosaic — AI Systems & ML Compilers',
     description: 'A free, self-paced course on AI Systems, ML Compilers, and AI Architectures.',
     locale: 'en_US',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Mosaic — A free course on AI Systems & ML Compilers',
+    title: 'Mosaic — AI Systems & ML Compilers',
     description: 'A free, self-paced course on AI Systems, ML Compilers, and AI Architectures.',
   },
   metadataBase: new URL('https://mosaic.shivy.dev'),
@@ -73,6 +73,12 @@ try {
     document.documentElement.classList.add('light');
   }
 } catch (e) {}
+try {
+  var m = localStorage.getItem('mosaic:mode');
+  document.documentElement.dataset.mode = (m === 'reference') ? 'reference' : 'learn';
+} catch (e) {
+  document.documentElement.dataset.mode = 'learn';
+}
 `
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

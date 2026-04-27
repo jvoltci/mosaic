@@ -47,12 +47,106 @@ Every lesson follows the same template so readers always know where to look:
 
 ---
 
+## Reading modes — Learn vs Reference
+
+Every lesson ships in **two modes** wrapped inside one MDX file:
+
+```mdx
+---
+title: Lesson Title
+description: ...
+last_reviewed: YYYY-MM-DD
+---
+# Lesson Title
+
+<Mode is="learn">
+
+[1–3 paragraph warm hook anchored to managed-runtime / analogy]
+
+## TL;DR
+- bullets…
+
+[the 9-section body, with `<Term>` tags on jargon]
+
+</Mode>
+
+<Mode is="reference">
+
+[the original / dense / reference-quality version of the same lesson — same TL;DR, same body, no warm hook]
+
+</Mode>
+
+<LessonComplete />
+```
+
+A small toggle in the lesson breadcrumb (`<ModeToggle />`, registered in `LessonChrome`) lets readers flip between Learn and Reference; the choice persists in `localStorage` site-wide. CSS hides the inactive block. Default mode = `learn`.
+
+**Why two modes:** Learn is a paced walk-through for someone new to the topic; Reference is the dense lookup version for someone who already knows it. Same facts, two ramps.
+
+**Rules:**
+
+1. The shared `# H1` lives **outside** both `<Mode>` blocks. Same with `<LessonComplete />` at the end.
+2. The Learn block must come **first** in the file — `scripts/build-cheatsheet.mjs` extracts the first `## TL;DR` it finds, and the Learn TL;DR is the one we want indexed.
+3. Both modes carry their own `<Quiz>` / `<FillIn>` / `<RunInBrowser>` / `<Resources>`. They render in the static HTML; CSS hides the inactive one. The build doubles in size per lesson — acceptable.
+4. Frontmatter (`title`, `description`, `last_reviewed`) is shared and lives once at the top.
+5. Lessons that haven't been converted yet (single body, no `<Mode>` wrapper) still render correctly — the toggle auto-hides on those pages.
+
+When a Learn block contains the markdown `<digit` pattern (e.g., `<10%`), the MDX parser treats it as a JSX tag start and breaks. Rewrite as "under 10%". The lint script catches this; see *MDX traps* below.
+
+---
+
+## Voice rules for the Learn block
+
+Learn mode is the warm walk-through. Six rules:
+
+1. **Open with an analogy or contrast, not a definition.** Anchor unfamiliar systems concepts to ideas a working engineer already has — garbage collection, dynamic arrays, runtimes that "hide" memory. Lead with the thing that makes the abstraction concrete (the heap is "an ocean of RAM"; the stack is "a stack of plates").
+2. **Compare to GC'd / managed-runtime languages generically.** Say "in a managed language…" or "in a GC'd runtime…" — *not* "in Node.js" or "in Flutter." Mosaic stays general; the analogy works for anyone who's written Python, Java, Go, JS, Ruby, or similar.
+3. **Define-before-use.** Any jargon word gets defined the first time it appears — either inline in plain English, or wrapped in `<Term name="...">` (entry in `lib/glossary.ts`) for a longer pop-over.
+4. **One micro-concept per section.** Short paragraphs. Whitespace. Each section should be readable in under 60 seconds.
+5. **Keep all the rigor.** All numbers, code, tables, and benchmarks from the Reference version stay. The Learn block changes the *ramp*, not the *ceiling*.
+6. **End with confidence checks.** `<Quiz>` and/or `<FillIn>` near the end of the Learn block. The reader should be able to articulate, in their own words, the headline takeaway when they finish.
+
+The Reference block has none of these constraints — it's the dense, opinionated, jargon-friendly version. Both modes are valid; they serve different readers.
+
+The pilot for the voice is `content/foundations/cpp-memory/stack-vs-heap.mdx`. Match its tone.
+
+---
+
+## Code language: C++ vs Python
+
+Mosaic teaches people heading into roles where the production stack is C++, CUDA, Rust, Triton, MLIR. Static code blocks should match that reality. The rule for **every fenced code block in a lesson body** (not `<RunInBrowser>` — that stays Python because Pyodide):
+
+| Topic | Language |
+| --- | --- |
+| Kernel internals (CUDA, ROCm, Metal compute shaders) | **C++ / CUDA / PTX** |
+| Memory allocators, RAII, move semantics, pointers | **C++** |
+| GPU primitives (TMA, WGMMA, mma.sync, ldmatrix, swizzle) | **CUDA / PTX inline asm** |
+| Compiler IR (LLVM-IR, MLIR text form, PTX) | **The IR's own text format** |
+| CUTLASS / CuTe / ThunderKittens | **C++** |
+| llama.cpp internals, ExecuTorch, CoreML internals, Hexagon, TFLite C-API | **C / C++** |
+| NCCL ops, MPI, RDMA verbs | **C / C++** |
+| Triton DSL (kernel author surface) | **Python with `@triton.jit`** — Triton's frontend is Python, that's the actual code |
+| PyTorch user API (`tensor.stride()`, `torch.compile`, `model.generate()`) | **Python** — that's how real code calls it |
+| Serving config (`vllm.LLM(...)`, `engine_args=...`) | **Python** — that's the user surface |
+| Training loops, optimizers, FSDP setup | **Python** — PyTorch user surface |
+| Math sketches of an algorithm (quantization formulas, attention math) | **Python or pseudocode** — pick whichever is clearer |
+
+The decision rule when in doubt: **what language does the production code that does this thing actually use?** That's the language that goes in the code block. If the same lesson covers user-facing API *and* internals, show both — Python for the user surface, C++/CUDA for the kernel.
+
+`<RunInBrowser>` snippets are exempt from this rule — they're always Python because Pyodide is the only in-browser runtime. The `## Run it in your browser` block is for *concept demonstration*; the `## Concrete walkthrough` block is for *the language someone will actually write the production version in*.
+
+Don't default to Python. Decide first, then write.
+
+---
+
 ## Components available in MDX
 
 All registered globally in [`mdx-components.tsx`](./mdx-components.tsx) — no imports needed inside lessons.
 
 | Component | Purpose |
 | --- | --- |
+| `<Mode is="learn">…</Mode>` / `<Mode is="reference">…</Mode>` | Wraps the Learn or Reference variant of a lesson body. CSS hides the inactive one. See *Reading modes* above. |
+| `<Term name="page fault">page fault</Term>` | Inline jargon-on-tap. Looks up `name` in `lib/glossary.ts` and shows the entry on click. Falls back to plain text if no glossary entry exists, so authors can stage entries. Add a glossary entry in `lib/glossary.ts` when introducing a new piece of jargon worth defining. |
 | `<Quiz question="..." options={[...]} answer={i} explanation="..." />` | Multi-choice with reveal. |
 | `<Figure src="..." alt="..." caption="..." />` | Image with caption. |
 | `<Cheatsheet>...</Cheatsheet>` | Inline TL;DR-style callout (orthogonal to the auto-aggregated `## TL;DR`). |
@@ -337,6 +431,8 @@ The mosaic now shows the tile fully filled (the model's progress UI assumes "ava
 
 ## When in doubt
 
-Read [`content/foundations/cpp-memory/stack-vs-heap.mdx`](./content/foundations/cpp-memory/stack-vs-heap.mdx) and [`content/llm-architecture/kv-cache/kv-basics.mdx`](./content/llm-architecture/kv-cache/kv-basics.mdx) — these are the reference lessons. Match their density, voice, and structure.
+Read [`content/foundations/cpp-memory/stack-vs-heap.mdx`](./content/foundations/cpp-memory/stack-vs-heap.mdx) — the canonical dual-mode pilot. Both `<Mode is="learn">` and `<Mode is="reference">` are present; the Learn block models the warm-hook → TL;DR → define-before-use pacing; the Reference block is the original dense version. Match its structure and voice.
+
+For an example of the C++-vs-Python policy in action, look at [`content/foundations/parallelism/async.mdx`](./content/foundations/parallelism/async.mdx) — Python `asyncio` for the user-facing API, **C++20 coroutines** for the C++ analogue, **CUDA streams** in C++ for the GPU side, and **Rust `tokio`** for the systems angle. Same lesson, four code languages, each chosen because that's what production code in that role actually uses.
 
 The point of Mosaic is to be the course you'd actually want to take. Every lesson should pass the test: *is this clearer, denser, and more fun to read than what you'd find on the open web?* If not, keep editing.

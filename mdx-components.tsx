@@ -11,6 +11,8 @@ import { Capstone } from './components/Capstone'
 import { FillIn } from './components/FillIn'
 import { CostCalc } from './components/CostCalc'
 import { FavoritesView } from './components/FavoritesView'
+import { Term } from './components/Term'
+import { Mode } from './components/Mode'
 
 const docsComponents = getDocsMDXComponents()
 
@@ -29,5 +31,7 @@ export const useMDXComponents = (components?: Record<string, React.ComponentType
   FillIn,
   CostCalc,
   FavoritesView,
+  Term,
+  Mode,
   ...components,
 })
