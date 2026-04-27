@@ -2222,27 +2222,12 @@ h2.m-focus-h2.is-active {
 }
 
 /* ============================================================
-   Reading progress bar (top of viewport, below nav)
+   Reading-progress bar moved to CourseNav as .m-nav-progress-line.
+   Old .m-reading-progress / .m-reading-progress-fill rules removed —
+   they were drawing a duplicate line below the nav that drifted
+   mid-page when the nav auto-hid on scroll.
    ============================================================ */
-.m-reading-progress {
-  position: fixed;
-  top: var(--m-nav-h);
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: transparent;
-  z-index: 99;
-  pointer-events: none;
-}
-
-.m-reading-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent, var(--m-terracotta)), var(--m-gold));
-  transform-origin: left;
-  transition: transform 0.1s linear;
-  border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent, var(--m-terracotta)) 50%, transparent);
-}
+.m-reading-progress, .m-reading-progress-fill { display: none; }
 
 /* ============================================================
    Section dots stepper (right edge)

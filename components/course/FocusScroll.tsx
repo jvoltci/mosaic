@@ -25,7 +25,6 @@ export function FocusScroll({ children }: { children: React.ReactNode }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [sections, setSections] = useState<SectionInfo[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
-  const [progress, setProgress] = useState(0)
 
   // Discover h2s. No DOM wrapping — just tag with id + a class for styling.
   useEffect(() => {
@@ -78,26 +77,7 @@ export function FocusScroll({ children }: { children: React.ReactNode }) {
     })
   }, [activeIndex, sections])
 
-  // Reading progress bar.
-  useEffect(() => {
-    const wrapper = wrapperRef.current
-    if (!wrapper) return
-
-    const onScroll = () => {
-      const rect = wrapper.getBoundingClientRect()
-      const totalHeight = wrapper.scrollHeight - window.innerHeight
-      if (totalHeight <= 0) {
-        setProgress(0)
-        return
-      }
-      const scrolled = -rect.top
-      setProgress(Math.max(0, Math.min(1, scrolled / totalHeight)))
-    }
-
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
+  // Reading-progress bar lives in CourseNav now (single, viewport-pinned).
 
   const scrollToSection = (index: number) => {
     const wrapper = wrapperRef.current
@@ -110,12 +90,10 @@ export function FocusScroll({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className="m-reading-progress" aria-hidden>
-        <div
-          className="m-reading-progress-fill"
-          style={{ transform: `scaleX(${progress})` }}
-        />
-      </div>
+      {/* Reading-progress bar moved to the global CourseNav so there's a
+          single, viewport-top-pinned line (was: a duplicate here that sat
+          at top: var(--m-nav-h) and visually drifted mid-page when the
+          nav auto-hid on scroll). */}
 
       {sections.length > 1 && (
         <nav className="m-section-dots" aria-label="Lesson sections">
