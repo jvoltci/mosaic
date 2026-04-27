@@ -1,9 +1,244 @@
 ---
 title: Whisper.cpp & On-Device Speech
 description: Real-time speech-to-text on phones — VAD, chunking, streaming decode, the ggml-runtime sibling of llama.cpp.
-last_reviewed: 2026-04-26
+last_reviewed: 2026-04-27
 ---
+
 # Whisper.cpp & On-Device Speech
+
+<Mode is="learn">
+
+In a cloud-serving world, "transcribe this audio" is one HTTP POST. The latency budget is round-trip + a few hundred ms of GPU time, the cost is whatever OpenAI charges per minute, and the runtime is whichever Python container the cloud team set up. The user's microphone bytes leave the device and come back as text.
+
+That model has three problems on a phone. **Latency**: 200–800 ms of round-trip is enough to make voice UX feel laggy. **Cost**: even at $0.006/minute, an "always-on dictation" app loses money on every active user. **Privacy**: the user's voice goes over the network. So the on-device speech world has converged on a different stack — **Whisper.cpp**, the same author's <Term name="ggml">`ggml`</Term>-based runtime that powers llama.cpp, but tuned for an encoder-decoder model with audio in and tokens out.
+
+The shape is familiar: Python is the SDK, C++ is what runs on the device, and the runtime is a single small library you link into your app. The new wrinkles are *streaming* (you don't have the whole audio file when you start) and *VAD* (the unsexy classifier that decides whether to even spend CPU on this 30 ms of audio). Get those right and `small.en` Q5_1 transcribes faster than the user can talk on a 3-year-old phone.
+
+## TL;DR
+
+- **Whisper.cpp** is Georgi Gerganov's port of OpenAI Whisper to the same `ggml` runtime that powers llama.cpp. Quantized models (Q5_1 / Q8_0) hit real-time-or-better on a phone CPU; Metal / Vulkan / CUDA backends 2–4× that on a GPU.
+- The runtime exposes a tiny C API (`whisper_init_from_file`, `whisper_full`, `whisper_full_get_segment_text`) and bindings for every language. ~1 MB binary, ~244 MB for `small.en` Q5_1.
+- **Voice activity detection (VAD)** is the unsexy piece that makes streaming actually work — Silero-VAD or webrtcvad runs in under 1% CPU and detects speech-vs-silence in 30 ms windows. Without VAD, you transcribe silence and waste battery.
+- **Chunking** is the rest of the streaming story: feed Whisper 5–30 s windows with overlap, deduplicate the overlap, emit partial text as the latest chunk arrives. The Whisper.cpp `stream` example codifies the pattern.
+- The right model size: `small.en` (244 MB) for English-only on phone, `base` (74 MB) if you're memory-constrained, `medium` (~770 MB) on a laptop. `large-v3` only on a desktop GPU.
+
+## Why this matters
+
+Voice is the killer phone interaction — typing on a touchscreen is the friction that AI assistants are supposed to remove. Cloud STT works but has three problems: latency (200–800 ms round trip), cost (~$0.006/min adds up), and privacy (your prompts cross the network). Whisper.cpp eliminates all three.
+
+The 2026 reality: Whisper.cpp has been in production in serious apps for two years (MacWhisper, SuperWhisper, the iOS app Voice In Voice). It works. The lesson is *how it works* — because the same `ggml` patterns power every other on-device speech model coming next (Distil-Whisper, Moshi, Whisper-large-v3-turbo).
+
+## Mental model
+
+```mermaid
+flowchart LR
+  mic[Microphone 16kHz mono] --> vad[VAD: speech / silence]
+  vad -- speech --> buf[Audio buffer]
+  buf -- 5-30s window --> spec[Mel spectrogram]
+  spec --> enc[Whisper encoder]
+  enc --> dec[Whisper decoder]
+  dec --> tokens[Token stream]
+  tokens --> dedupe[Overlap dedup]
+  dedupe --> ui[UI partial transcript]
+```
+
+Three buffer scales:
+
+- **30 ms VAD frames** — cheap classifier deciding whether to even spend CPU on this audio.
+- **5–30 s Whisper window** — the model's native context. Below 5 s the encoder gets confused; above 30 s you're past the model's training context.
+- **Final transcript** — concatenated, deduplicated text from all the windows.
+
+## What Whisper actually does internally
+
+Whisper is an encoder-decoder transformer trained on 680K hours of multilingual audio. Two halves:
+
+1. **Encoder**: 80-channel log-mel spectrogram → 6/12/24 transformer blocks. Output: `(seq_len, d_model)` features. Runs once per audio window.
+2. **Decoder**: 6/12/24 transformer blocks with cross-attention to encoder output. Generates tokens autoregressively, one at a time, like any LLM. Tokens are byte-pair pieces over a 51,865-piece tokenizer.
+
+The decoder is GPT-2-shaped. Whisper.cpp's `ggml` runtime treats it identically to a Llama decode — same <Term name="kv cache">KV cache</Term>, same speculative-decoding tricks apply (you can speculative-decode Whisper-large with Distil-Whisper as the draft model).
+
+## The Whisper.cpp C API
+
+This is what runs on the device — a few function calls into a static library:
+
+```c
+// Load + warm up
+struct whisper_context* ctx = whisper_init_from_file("ggml-small.en-q5_1.bin");
+
+// Configure
+struct whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+p.print_progress = false;
+p.print_realtime = false;
+p.language = "en";
+p.translate = false;
+p.n_threads = 4;
+
+// Run on a 30s audio buffer (16kHz mono float)
+whisper_full(ctx, p, audio_pcm, n_samples);
+
+// Pull segments
+const int n = whisper_full_n_segments(ctx);
+for (int i = 0; i < n; i++) {
+    const char* text = whisper_full_get_segment_text(ctx, i);
+    int64_t t0 = whisper_full_get_segment_t0(ctx, i);  // start, hundredths of seconds
+    int64_t t1 = whisper_full_get_segment_t1(ctx, i);
+    printf("[%lld..%lld] %s\n", t0, t1, text);
+}
+
+whisper_free(ctx);
+```
+
+That's the whole runtime API. Bindings exist for Swift, Kotlin, Python, JS — they all wrap this same C surface.
+
+## VAD: the streaming linchpin
+
+A naive streaming impl runs Whisper on every 5-second window of audio. That's ~1 W of CPU continuously. The fix: only run Whisper when there's actually speech.
+
+The orchestration code is usually written in the host language — Python in the desktop case, Swift/Kotlin on phones. The math is light enough that it doesn't matter:
+
+```python
+# pseudo-code with silero-vad
+import silero_vad
+
+vad = silero_vad.load()  # ~1 MB model
+buffer = []
+in_speech = False
+silence_ms = 0
+
+for frame_30ms in audio_stream():
+    is_speech = vad(frame_30ms)
+    if is_speech:
+        buffer.append(frame_30ms)
+        in_speech = True
+        silence_ms = 0
+    elif in_speech:
+        silence_ms += 30
+        buffer.append(frame_30ms)  # keep trailing silence (Whisper expects it)
+        if silence_ms > 600:  # end of utterance
+            transcribe(buffer)
+            buffer = []
+            in_speech = False
+```
+
+Silero-VAD: ~1 MB, under 0.1 ms per 30 ms frame on a phone CPU. webrtcvad is even smaller (a hand-tuned signal-processing classifier — no neural net). Either is fine.
+
+The 600 ms silence threshold is the magic number — long enough to cleanly separate utterances, short enough that the user doesn't feel the app is dragging.
+
+## Chunking with overlap
+
+Whisper is trained on 30 s windows. For longer audio you need overlapping chunks:
+
+- Chunk every 30 s with a 5 s overlap.
+- Run Whisper on chunk N.
+- The first 5 s of chunk N's transcript should match the last 5 s of chunk N-1's transcript. Use that to align and deduplicate.
+- Emit the non-overlapping portion of each chunk to the user.
+
+Whisper.cpp's `stream` example handles all of this. For *true* low-latency streaming (token-by-token as the user speaks) the trick is to run Whisper on a sliding 5 s window with frequent re-runs — accept that the early text changes as more audio arrives. This is the SuperWhisper approach.
+
+## Quantization choices, in numbers
+
+| Model | FP16 size | Q5_1 size | Q8_0 size | Phone tok/s | Quality drop vs FP16 |
+|---|---|---|---|---|---|
+| `tiny.en` | 75 MB | 27 MB | 42 MB | 8× realtime | ~negligible |
+| `base.en` | 142 MB | 50 MB | 78 MB | 4× realtime | ~negligible |
+| `small.en` | 466 MB | 244 MB | 392 MB | 2× realtime | under 1 WER point |
+| `medium` | 1.5 GB | 770 MB | 1.2 GB | ~realtime on M2 only | under 1 WER |
+| `large-v3` | 3 GB | 1.6 GB | 2.4 GB | desktop GPU only | best |
+
+`small.en` Q5_1 is the production sweet spot for English-only mobile. `base` if you're squeezed on RAM. The Distil-Whisper variants (`distil-small.en`, ~166 MB) match `small.en` quality at half the size and 2× the speed — released by Hugging Face in late 2023, fully `ggml`-compatible.
+
+## What "real-time" means honestly
+
+"Real-time factor (RTF)" = (model latency) / (audio duration). RTF=1 means you can transcribe live. RTF=0.5 means twice as fast as live.
+
+- Whisper.cpp `small.en` Q5_1 on iPhone 15 Pro: RTF ~0.4–0.5 (live transcription with a small lag).
+- Same on iPhone 11: RTF ~0.8 (just barely keeps up).
+- `medium` on iPhone 15 Pro: RTF ~1.2 (falls behind on long audio).
+- `medium` on M2 Air: RTF ~0.3 (very comfortable live).
+
+The streaming UX target: end-to-end user-perceived lag under 500 ms. With VAD's 600 ms post-silence delay + Whisper's ~200 ms inference, you're at 800 ms — which feels snappy but not instantaneous. The lower-bound is dominated by VAD's silence-end detection, not Whisper.
+
+## Run it in your browser
+
+A useful demo: simulate a streaming Whisper session — VAD-gated chunks, with quality-vs-latency trade-off visible. The math behind RTF.
+
+<RunInBrowser
+  description="Tweak the model and the audio to see end-to-end perceived latency. VAD silence threshold dominates UX more than model speed does."
+  code={`# Simulate VAD-gated streaming Whisper.
+def stream_session(audio_seconds, model_rtf, vad_silence_ms, utterance_count):
+    # Each utterance: encoder pass + decoder pass + VAD silence detection.
+    # End-to-end perceived lag = inference time + VAD silence trail.
+    avg_utterance_s = audio_seconds / max(1, utterance_count)
+    inference_s_per_utt = avg_utterance_s * model_rtf
+    perceived_lag_ms = inference_s_per_utt * 1000 + vad_silence_ms
+    total_compute_s = inference_s_per_utt * utterance_count
+    cpu_budget_pct = (total_compute_s / audio_seconds) * 100
+    return {
+        "perceived_lag_ms": perceived_lag_ms,
+        "cpu_budget_pct": cpu_budget_pct,
+    }
+
+# A 60-second audio with 8 short utterances (typical chat)
+scenarios = [
+    ("tiny.en  Q5_1   on iPhone 15", 0.13, 600),
+    ("small.en Q5_1   on iPhone 15", 0.40, 600),
+    ("medium   Q5_1   on iPhone 15", 1.20, 600),
+    ("small.en Q5_1   on M2 Air",    0.18, 600),
+    ("small.en Q5_1   tighter VAD",  0.40, 350),
+]
+
+print(f"{'scenario':<32} {'lag_ms':>10} {'cpu%':>8}")
+for name, rtf, vad_ms in scenarios:
+    r = stream_session(60, rtf, vad_ms, 8)
+    flag = ""
+    if r["perceived_lag_ms"] > 1500: flag = "  ← sluggish"
+    if r["cpu_budget_pct"] > 80:    flag += "  ← thermal-throttle risk"
+    print(f"{name:<32} {r['perceived_lag_ms']:>10.0f} {r['cpu_budget_pct']:>7.1f}%{flag}")
+`}
+/>
+
+The headline insight: VAD silence threshold dominates perceived latency more than the model size does, *until you pick a model the device can't keep up with*.
+
+## Quick check
+
+<Quiz
+  question="You ship a Whisper.cpp streaming feature on iPhone. Users on iPhone 11 (A13) report 'it works for the first 30 seconds then gets really slow'. iPhone 15 (A17) users have no issue. What's the most likely cause and fix?"
+  options={[
+    "The Whisper model is too large to fit in iPhone 11's RAM; switch to a smaller model.",
+    "Thermal throttling on A13 — the older chip can't sustain `small.en` at full speed; auto-detect device class and pick `tiny.en` or `base.en` for older devices.",
+    "iPhone 11's neural engine doesn't support FP16; convert the model to INT8.",
+    "Background app refresh is killing the Whisper process; request the long-running task entitlement.",
+  ]}
+  answer={1}
+  explanation="The 'fine for 30 seconds then slows down' signature is the textbook iOS thermal-throttle curve — the phone runs at full clock for the first ~30 s, then aggressively throttles when chip temperature crosses ~38°C. Older chips with smaller heat budgets hit the throttle sooner. The right fix is device-class detection (UIDevice → A13 / A14 / A15 / A16 / A17) and pick a model size the device can sustain. RAM (option a) and INT8 (option c) aren't the issue; iPhone 11 has 4 GB and Whisper FP16 fits fine. Background tasks (option d) wouldn't show this gradual slowdown pattern."
+/>
+
+## Key takeaways
+
+1. **Whisper.cpp** is Whisper running on the `ggml` runtime — same C-API DNA as llama.cpp, ships everywhere ggml ships.
+2. **`small.en` Q5_1** is the production English mobile sweet spot: 244 MB, RTF ~0.4 on a recent phone.
+3. **VAD is required** for streaming — Silero-VAD or webrtcvad. Cuts CPU by 5–10× and improves UX.
+4. **600 ms silence threshold** is the magic UX number — short enough to feel snappy, long enough to cleanly separate utterances.
+5. **Distil-Whisper** is a same-quality, smaller, faster variant — production-ready in late 2023.
+6. **Thermal throttling** is the iOS gotcha — older chips fall behind after ~30 s of continuous transcription.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'repo', href: 'https://github.com/ggerganov/whisper.cpp', title: 'ggerganov/whisper.cpp', author: 'Georgi Gerganov', note: 'The reference implementation. Read `examples/stream/stream.cpp` for the canonical streaming pattern.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2212.04356', title: 'Robust Speech Recognition via Large-Scale Weak Supervision', author: 'Radford et al., 2022', note: 'The original Whisper paper. Useful for the encoder/decoder architecture and the multilingual training story.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2311.00430', title: 'Distil-Whisper: Robust Knowledge Distillation via Large-Scale Pseudo Labelling', author: 'Gandhi et al., 2023', note: 'Distil-Whisper details — same quality, half the params, 2× the speed. Fully ggml-compatible.' },
+    { kind: 'repo', href: 'https://github.com/snakers4/silero-vad', title: 'snakers4/silero-vad', author: 'Silero', note: 'The VAD model — 1 MB, real-time on phone CPU. The streaming-Whisper companion.' },
+    { kind: 'blog', href: 'https://huggingface.co/blog/whisper-speculative-decoding', title: 'Speculative Decoding for 2× Faster Whisper Inference', author: 'Sanchit Gandhi, 2023', note: 'Whisper-large + Distil-Whisper draft = 2× speedup, bit-identical output. Same trick we cover for LLMs in [Speculative Decoding](../distillation/speculative-decoding).' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=AwJf8aQfChE', title: 'Whisper.cpp: A Deep Dive', author: 'Georgi Gerganov', note: 'The author walks the codebase. Useful if you\'re extending the runtime.' },
+    { kind: 'docs', href: 'https://platform.openai.com/docs/guides/speech-to-text', title: 'OpenAI Whisper API Docs', author: 'OpenAI', note: 'Reference for the original cloud-API behaviors. Whisper.cpp matches the model semantics; the API surface differs.' },
+  ]}
+/>
+
+</Mode>
+
+<Mode is="reference">
 
 ## TL;DR
 
@@ -224,5 +459,7 @@ The headline insight: VAD silence threshold dominates perceived latency more tha
     { kind: 'docs', href: 'https://platform.openai.com/docs/guides/speech-to-text', title: 'OpenAI Whisper API Docs', author: 'OpenAI', note: 'Reference for the original cloud-API behaviors. Whisper.cpp matches the model semantics; the API surface differs.' },
   ]}
 />
+
+</Mode>
 
 <LessonComplete />
