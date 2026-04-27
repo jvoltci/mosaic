@@ -69,7 +69,6 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
   }, [completed])
 
   const totalDone = TILES.reduce((n, t) => n + (completed.has(t.slug) ? 1 : 0), 0)
-  const availableCount = TILES.reduce((n, t) => n + (t.available ? 1 : 0), 0)
 
   function showTooltipForTile(tile: Tile, anchor: SVGElement, pinned = false) {
     if (!stageRef.current) return
@@ -97,14 +96,14 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
           <p className="m-section-eyebrow">The course map</p>
           <h2 className="m-section-title">
             {totalDone === 0
-              ? `${availableCount} of ${TILES.length} lessons written. Pick any tile.`
-              : totalDone === availableCount
-                ? `🏁 ${totalDone} of ${availableCount} written lessons completed.`
-                : `${totalDone} of ${availableCount} written lessons completed.`}
+              ? `${TILES.length} lessons across 7 tracks. Pick any tile.`
+              : totalDone === TILES.length
+                ? `🏁 You've completed all ${TILES.length} lessons.`
+                : `${totalDone} of ${TILES.length} lessons completed.`}
           </h2>
           <p className="m-section-lede">
-            Every tile is one lesson. Solid tiles are written; dashed tiles are stubs being filled in. Hover or
-            tap to see what each teaches.
+            Every tile is one lesson. Hover or tap a tile to see what it teaches; completed lessons glow in
+            their track's accent color.
           </p>
         </header>
       )}
@@ -128,6 +127,7 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
               const slug = tile.available ? tile.slug : tile.fallback
               const target = `${process.env.NEXT_PUBLIC_BASE_PATH || ''}${slug}`
 
+              const isPlaceholder = tile.illustration === 'placeholder'
               return (
                 <a
                   key={tile.slug}
@@ -160,18 +160,30 @@ export function MosaicMap({ variant = 'landing', hexSize = 38 }: Props) {
                   <g transform={`translate(${x.toFixed(2)} ${y.toFixed(2)})`}>
                     <path d={hexPath(0, 0, hexSize)} className="m-mtile-hex" />
                     <g className="m-mtile-art" pointerEvents="none">
-                      <Illustration color={isCompleted ? accent : 'var(--m-fg)'} size={hexSize} />
+                      {isCompleted && isPlaceholder ? (
+                        // Placeholder tiles: replace the dots with a big centered checkmark on completion.
+                        <path
+                          d={`M${(-hexSize * 0.30).toFixed(2)},0 L${(-hexSize * 0.05).toFixed(2)},${(hexSize * 0.22).toFixed(2)} L${(hexSize * 0.34).toFixed(2)},${(-hexSize * 0.24).toFixed(2)}`}
+                          stroke={accent}
+                          strokeWidth={hexSize * 0.13}
+                          fill="none"
+                          strokeLinejoin="round"
+                          strokeLinecap="round"
+                        />
+                      ) : (
+                        <Illustration color={isCompleted ? accent : 'var(--m-fg)'} size={hexSize} />
+                      )}
                     </g>
-                    {isCompleted && (
+                    {isCompleted && !isPlaceholder && (
                       <g
                         transform={`translate(${(hexSize * 0.55).toFixed(2)} ${(-hexSize * 0.6).toFixed(2)})`}
                         pointerEvents="none"
                       >
-                        <circle r={5.5} fill={accent} />
+                        <circle r={hexSize * 0.18} fill={accent} />
                         <path
-                          d="M-2.6,0 L-0.6,2 L2.6,-2"
+                          d={`M${(-hexSize * 0.085).toFixed(2)},0 L${(-hexSize * 0.02).toFixed(2)},${(hexSize * 0.065).toFixed(2)} L${(hexSize * 0.085).toFixed(2)},${(-hexSize * 0.065).toFixed(2)}`}
                           stroke="var(--m-bg)"
-                          strokeWidth={1.6}
+                          strokeWidth={hexSize * 0.06}
                           fill="none"
                           strokeLinejoin="round"
                           strokeLinecap="round"

@@ -1115,7 +1115,13 @@ body {
   display: block;
   margin: 0 auto;
   overflow: visible;
-  max-width: 100%;
+}
+
+/* On phones the SVG keeps its native width and the user scrolls horizontally
+   inside the .m-mosaic-scroller. Without this rule the SVG would compress to
+   100% of viewport and tiles become unreadable. */
+@media (min-width: 1024px) {
+  .m-mosaic-svg { max-width: 100%; }
 }
 
 .m-mosaic-hint {
@@ -1127,6 +1133,22 @@ body {
   color: var(--m-fg-dim);
   margin: 0.5rem 0 0;
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Show the swipe hint on phones so users know the map scrolls horizontally. */
+@media (max-width: 1024px) {
+  .m-mosaic-hint { display: block; }
+  .m-mosaic-stage::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 1.8rem;
+    right: 0;
+    width: 1.5rem;
+    background: linear-gradient(to left, var(--m-bg), transparent);
+    pointer-events: none;
+    z-index: 5;
+  }
 }
 
 /* Floating tooltip — positioned above the active tile */
@@ -1245,9 +1267,10 @@ body {
 }
 
 .m-mtile.is-completed .m-mtile-hex {
-  stroke-opacity: 0.85;
-  stroke-width: 1.6;
-  fill: color-mix(in srgb, var(--accent) 8%, var(--m-bg-soft));
+  stroke-opacity: 1;
+  stroke-width: 2.0;
+  fill: color-mix(in srgb, var(--accent) 28%, var(--m-bg-soft));
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 45%, transparent));
 }
 
 .m-mtile.is-completed .m-mtile-art {
@@ -3016,16 +3039,20 @@ h2.m-focus-h2.is-active {
 
 .m-run-output {
   margin: 0;
-  padding: 0.85rem 1rem;
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 0.82rem;
-  line-height: 1.55;
-  background: rgba(0, 0, 0, 0.3);
+  padding: 0.95rem 1.1rem;
+  font-family: var(--font-mono), ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-size: 0.84rem;
+  line-height: 1.7;
+  background: rgba(0, 0, 0, 0.35);
   color: var(--m-fg);
   border-top: 1px solid var(--m-border);
-  max-height: 14rem;
+  max-height: 18rem;
   overflow: auto;
-  white-space: pre-wrap;
+  white-space: pre;
+  word-break: normal;
+  tab-size: 4;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'calt' 0;
 }
 
 .m-run-output.is-error {

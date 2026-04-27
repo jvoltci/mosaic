@@ -26,19 +26,6 @@ export function ThemeToggle() {
 
   useEffect(() => {
     setTheme(readTheme())
-    const onMedia = () => {
-      // Only follow system if user hasn't chosen a preference
-      try {
-        if (!localStorage.getItem(KEY)) {
-          const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-          applyTheme(sysDark ? 'dark' : 'light')
-          setTheme(sysDark ? 'dark' : 'light')
-        }
-      } catch {}
-    }
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    mq.addEventListener('change', onMedia)
-    return () => mq.removeEventListener('change', onMedia)
   }, [])
 
   function toggle() {
