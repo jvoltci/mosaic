@@ -1,9 +1,210 @@
 ---
 title: GRPO & RL Reasoning
 description: DeepSeek-R1's recipe — RL on verifiable rewards, no value model, group-relative advantages. The 2025 paradigm shift.
-last_reviewed: 2026-04-26
+last_reviewed: 2026-04-27
 ---
 # GRPO & RL Reasoning
+
+<Mode is="learn">
+
+DPO killed RLHF for the easy case. For the hard case — reasoning — RL came back, and it came back simpler.
+
+The classical RL recipe (<Term name="ppo">PPO</Term>) needed a learned <Term name="value function">value function</Term>: a second neural network the same shape as the policy, trained alongside it, that predicts "expected future reward from this state." The value function gave you a baseline to subtract from raw rewards (variance reduction), but it doubled GPU memory, doubled forward passes, and was a famous source of training instability — the value loss could diverge from the policy and quietly poison the gradient.
+
+<Term name="grpo">GRPO</Term> (DeepSeek, 2024) threw it out. Instead of learning a value baseline, it samples **G rollouts** for each prompt, scores them with a checker, and normalizes the rewards within the group: `(r_i − μ) / σ`. The mean of the group is your baseline. The std is your scale. No second network.
+
+Pair that with <Term name="verifiable reward">verifiable rewards</Term> — math answers checked by a parser, code checked by unit tests, format checked by regex — and you don't need a learned reward model either. The training signal is a bash exit code.
+
+The result, in January 2025, was DeepSeek-R1. Open weights. Public recipe. Reasoning capability that matched OpenAI's then-proprietary o1. The whole field shifted in three months. This lesson is the algorithm, the recipe, and the "aha moment" that made everyone pay attention.
+
+## TL;DR
+
+- **GRPO** (Group Relative Policy Optimization) is the RL algorithm DeepSeek used for R1. It removes PPO's value function — uses **group-relative advantages** instead.
+- **The training signal is verifiable**: math problems checked by a parser, code checked by unit tests. No reward model, no human labels.
+- The model learns to **emit long chain-of-thought** by RL on this signal alone — DeepSeek-R1-Zero went from 15% → 71% on AIME with no SFT, just GRPO on math.
+- **R1 final** uses cold-start SFT → GRPO → SFT-on-best-rollouts → another GRPO pass. The "aha moment" — the model spontaneously starts saying "Wait, let me reconsider" — emerged purely from the RL signal.
+- **OpenAI's o1/o3** family is widely believed to use a similar (proprietary) RL-on-reasoning recipe. As of April 2026, GRPO and its variants are the dominant post-training paradigm for reasoning models.
+
+## Mental model
+
+```mermaid
+flowchart LR
+  Q[Question with verifiable answer] --> R[Sample G rollouts from policy]
+  R --> Score[Score each rollout: reward = 1 if correct, 0 if wrong]
+  Score --> Adv[Group-relative advantage: a_i = (r_i - mean) / std]
+  Adv --> Update[Update policy: maximize Σ log π(rollout_i) · a_i  − β · KL]
+  Update -.-> Policy[Updated policy]
+  Policy --> R
+```
+
+The algorithm: for each prompt, sample $G$ rollouts, score them with a verifier, normalize the rewards within the group, take a gradient step.
+
+The trick is that the **group-relative normalization** removes the need for a value function: variance reduction comes from the group, not from a learned baseline.
+
+## GRPO step by step
+
+For a prompt $q$, sample $G$ completions $\{o_1, \ldots, o_G\}$ from the current policy $\pi_\theta$ and score each with a verifier $r_i \in [0, 1]$:
+
+**Group-relative advantage:**
+
+$$
+A_i = \frac{r_i - \mu_r}{\sigma_r}
+$$
+
+where $\mu_r$ and $\sigma_r$ are the mean and std of $\{r_1, \ldots, r_G\}$.
+
+**Loss (per token $t$ in completion $o_i$):**
+
+$$
+\mathcal{L}_{GRPO} = -\frac{1}{G}\sum_{i,t} \left[ \min\!\left( \rho_{i,t} A_i,\ \mathrm{clip}(\rho_{i,t}, 1{-}\epsilon, 1{+}\epsilon) A_i \right) - \beta \, D_{KL}(\pi_\theta \| \pi_{\mathrm{ref}}) \right]
+$$
+
+where $\rho_{i,t}$ is the PPO-style importance ratio (current policy probability / old policy probability of the same token), and `clip` is identical to PPO's clip term.
+
+**What's missing vs PPO:**
+
+- **No value function $V_\phi$**. The variance reduction comes from group-relative advantage. This saves you from training a separate critic — which in PPO doubles forward passes and adds instability.
+- **No GAE**. Just instantaneous group-normalized reward.
+
+**What's still there:**
+
+- KL penalty against a <Term name="reference policy">reference (frozen base) policy</Term> — keeps the policy from collapsing.
+- Importance ratio + clip — prevents one big update from breaking things.
+
+## The R1 recipe (the full pipeline)
+
+DeepSeek-R1 was trained in **four phases**:
+
+```text
+Phase 1: Cold-start SFT
+  - ~100K human-written long CoT examples on math/code
+  - Output: a base capable of long-form reasoning chains
+
+Phase 2: RL with GRPO (the heavy lifting)
+  - Math problems verified by exact-match
+  - Code problems verified by unit tests
+  - Reward = 1 (correct) or 0 (wrong) + format bonus for using <think>...</think>
+  - ~10K-30K RL steps over millions of rollouts
+  - Result: model emits 1000-10000 token reasoning chains, accuracy soars
+
+Phase 3: Rejection-sampling SFT
+  - For each problem, take the BEST rollouts from phase-2 policy
+  - SFT the base model on these high-quality reasoning traces
+  - Mixes in non-reasoning data (chat, safety) to keep general capability
+
+Phase 4: Final RL pass
+  - Another GRPO round on the SFT'd model from phase 3
+  - Adds a smaller reward signal for being "helpful and harmless"
+```
+
+The result: R1 matches o1 on AIME, MATH, GPQA, and approaches it on coding. Open weights. Reproducible.
+
+## The "aha moment"
+
+The most-cited result from the R1 paper: during phase 2 RL, the model **spontaneously develops self-reflection patterns** — phrases like "Wait, let me reconsider this", "Actually, I think I made an error here". These weren't in any training data. They emerged because they led to higher rewards.
+
+This is the closest the field has come to demonstrating *learned* reasoning behavior, as opposed to imitated reasoning behavior. It's a real qualitative phenomenon and it's the reason every lab pivoted in 2025.
+
+## Real-world adoption (April 2026)
+
+| Model | Confirmed / inferred recipe |
+| --- | --- |
+| OpenAI o1 (Sep 2024) | RL on long CoT, details proprietary; widely believed PPO or PPO-variant + verifiable rewards |
+| **DeepSeek-R1** (Jan 2025) | **GRPO + cold-start SFT, public recipe** |
+| Anthropic Claude 3.7 (early 2025) | Reasoning mode, recipe undisclosed |
+| Gemini 2.5 reasoning (mid 2025) | Reasoning mode, recipe undisclosed |
+| Qwen3-Thinking (2025) | Open source GRPO-derivative, very strong on reasoning |
+| **Llama-4** reasoning variant | GRPO-flavored RL with verifiable rewards |
+
+GRPO and its variants (Dr. GRPO with stronger advantage estimators, Reinforce++ with simpler updates, etc.) are now the open default for reasoning post-training.
+
+## What the systems engineer should know
+
+The math is on a postcard. The systems are not. A GRPO step at scale touches:
+
+- **Inference cluster** — sample G rollouts per prompt, often 4096 tokens each, possibly with a different model checkpoint than the training cluster. vLLM or SGLang on a separate pool.
+- **Verifier service** — math parsers, code sandboxes (often firejail or Bubblewrap), format regexes. Latency is the bottleneck once the rollout cluster is sized right.
+- **Trainer** — the GRPO loss itself, the KL term against a frozen ref, the importance ratio. Standard PyTorch DDP/FSDP with one extra forward pass for the ref model (often offloaded or quantized to keep memory in check).
+- **Replay buffer / scheduler** — the off-policy gap between rollout-time and gradient-time matters for stability.
+
+In open implementations like `verl` (volcengine) and `open-r1` (Hugging Face), each of those is a separate process. The Python the user writes is `trainer = GRPOTrainer(...); trainer.train()`. What it orchestrates is a distributed system.
+
+## Run it in your browser — toy GRPO update
+
+<RunInBrowser
+  description="Compute GRPO advantages on a tiny rollout batch — to feel the algorithm."
+  code={`import math
+
+# A toy "policy": 4 sampled completions and their rewards on one math problem
+rollouts = [
+    {"completion": "Let's see, 2+2=5",   "reward": 0.0, "logprob_sum": -4.2},
+    {"completion": "2+2 = 4. Done.",     "reward": 1.0, "logprob_sum": -2.1},
+    {"completion": "Reasoning... 2+2=4", "reward": 1.0, "logprob_sum": -3.5},
+    {"completion": "Hmm, 2+2 = 3?",      "reward": 0.0, "logprob_sum": -3.8},
+]
+
+# 1. Group-relative advantage: normalize rewards within the group
+rewards = [r["reward"] for r in rollouts]
+mean_r  = sum(rewards) / len(rewards)
+var_r   = sum((r - mean_r) ** 2 for r in rewards) / len(rewards)
+std_r   = math.sqrt(var_r) + 1e-8
+advantages = [(r - mean_r) / std_r for r in rewards]
+
+print("Per-rollout advantage (a_i):")
+for r, a in zip(rollouts, advantages):
+    print(f"  reward={r['reward']:.1f}  advantage={a:+.3f}  completion={r['completion'][:35]!r}")
+
+# 2. Loss = - sum over rollouts of advantage * logprob (no KL term in toy version)
+loss = -sum(a * r["logprob_sum"] for a, r in zip(advantages, rollouts)) / len(rollouts)
+print(f"\\nGRPO loss (per-prompt): {loss:.3f}")
+print("Note: positive-advantage completions get pushed up;")
+print("negative-advantage completions get pushed down. No value function needed.")
+`}
+/>
+
+The whole thing fits on a postcard. The engineering of running it at scale (efficient rollout, prefix caching, scheduling) is harder than the math.
+
+## Quick check
+
+<Quiz
+  question="What's the *primary* engineering benefit of GRPO over PPO for reasoning post-training?"
+  options={[
+    'GRPO converges faster on the same compute.',
+    'GRPO doesn\'t need a value function — saving the memory/compute of a separate critic model and avoiding critic instability.',
+    'GRPO gets higher final accuracy on math benchmarks.',
+    'GRPO works without a reference policy.',
+  ]}
+  answer={1}
+  explanation="The big systems win is removing the critic. PPO needs a value head trained alongside the policy, which adds memory, FLOPs, and a known source of instability (value loss diverging from the policy). GRPO's group-relative normalization gives you variance reduction without any of that machinery. (Final accuracy is comparable; convergence speed is task-dependent; reference policy is still needed for the KL term.)"
+/>
+
+## Key takeaways
+
+1. **GRPO removes the value function** from PPO — group-relative advantage replaces it. Massive engineering simplification.
+2. **Verifiable rewards are the unlock** — math, code, and constrained tasks where correctness is checkable. RL on these works without a learned reward model.
+3. **R1's recipe is public and reproducible.** Cold-start SFT → GRPO → rejection-sampling SFT → final GRPO. Several open replications now exist (DeepSeek-R1-Distill, Light-R1, OpenR1).
+4. **The "aha moment" is real.** Self-correction patterns emerge from the RL signal alone. This is qualitatively new behavior in 2025.
+5. **GRPO is one of several variants** — Dr. GRPO, Reinforce++, GRPO with token-level advantage. Watch the literature; the algorithm is still evolving.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'paper', href: 'https://arxiv.org/abs/2501.12948', title: 'DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning', author: 'DeepSeek-AI (January 2025)', note: 'The paper. Section 2.2 has the full GRPO objective. Required reading.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2402.03300', title: 'DeepSeekMath: Pushing the Limits of Mathematical Reasoning (introduces GRPO)', author: 'DeepSeek-AI (Feb 2024)', note: 'Where GRPO was first introduced — pre-R1. Foundation paper.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2503.20783', title: 'Dr. GRPO: A Better Advantage Estimator for GRPO', author: 'Various (early 2025)', note: 'A variance-reduction improvement on the basic GRPO. State of the art for reasoning RL through 2025.' },
+    { kind: 'blog', href: 'https://huggingface.co/blog/open-r1', title: 'Hugging Face — Open R1 Project', note: 'A community-led full open replication of R1. Code, recipes, ablations.' },
+    { kind: 'repo', href: 'https://github.com/huggingface/open-r1', title: 'huggingface/open-r1', note: 'Reference open implementation. Read `src/open_r1/grpo.py`.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=Llg6yj9eLvg', title: 'Andrej Karpathy — Deep Dive on RL Training', author: 'Andrej Karpathy', note: 'A 90-minute walkthrough of RL post-training including GRPO. Best non-paper explainer.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/1707.06347', title: 'Proximal Policy Optimization (PPO)', author: 'Schulman et al. (2017)', note: 'The predecessor. Read once to understand what GRPO simplifies away.' },
+    { kind: 'repo', href: 'https://github.com/volcengine/verl', title: 'volcengine/verl', note: 'A production-grade RL training framework that supports GRPO at scale.' },
+    { kind: 'blog', href: 'https://www.interconnects.ai/p/the-rise-of-reasoning-machines', title: 'Nathan Lambert — The Rise of Reasoning Machines', note: 'Excellent context on why GRPO mattered, post-R1.' },
+  ]}
+/>
+
+</Mode>
+
+<Mode is="reference">
 
 ## TL;DR
 
@@ -186,5 +387,7 @@ The whole thing fits on a postcard. The engineering of running it at scale (effi
     { kind: 'blog', href: 'https://www.interconnects.ai/p/the-rise-of-reasoning-machines', title: 'Nathan Lambert — The Rise of Reasoning Machines', note: 'Excellent context on why GRPO mattered, post-R1.' },
   ]}
 />
+
+</Mode>
 
 <LessonComplete />

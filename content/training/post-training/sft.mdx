@@ -1,9 +1,279 @@
 ---
 title: SFT & Instruction Tuning
 description: Chat templates, sample packing, prompt loss masking — turning a raw pretrained model into one that follows instructions.
-last_reviewed: 2026-04-26
+last_reviewed: 2026-04-27
 ---
 # SFT & Instruction Tuning
+
+<Mode is="learn">
+
+In a managed cloud environment, "train a model" is a YAML and a button. The orchestrator schedules workers, ingests data, runs your code, and writes checkpoints. You don't see the schedulers, the GPU drivers, the gradient broadcasts. The whole stack is abstracted into one API call.
+
+A modern PyTorch <Term name="sft">SFT</Term> script looks the same way. Two lines of Python — `trainer = SFTTrainer(...)` then `trainer.train()`. Behind those two lines: every prompt token gets masked out of the loss, short conversations get packed into long sequences with a custom attention mask, <Term name="bf16">bfloat16</Term> weights replicate across 8 GPUs, NCCL all-reduces gradients every micro-batch, AdamW updates parameters, checkpoints stream to disk. None of it is in your code.
+
+This lesson is about what those two lines actually do — and the three places the abstraction leaks: <Term name="chat template">chat templates</Term>, <Term name="prompt loss masking">prompt-loss masking</Term>, and <Term name="sample packing">sample packing</Term>. Get those three right and SFT is boring. Get any of them wrong and the model that comes out won't follow instructions.
+
+## TL;DR
+
+- **Supervised Fine-Tuning (SFT)** is the first post-training step: you train on (instruction, response) pairs so the model learns to follow directions instead of just completing text.
+- **Chat templates** (ChatML, Llama 3 format) wrap conversations with special tokens that delineate system/user/assistant turns. **Using the wrong template at inference = broken model.** Always match training and serving templates.
+- **Prompt loss masking** zeros the loss on instruction tokens (set labels to `-100`). The model only learns to *generate* responses, not to memorize your prompts.
+- **Sample packing** concatenates multiple short conversations into one sequence, eliminating padding waste. With proper attention masking, this gives 2–4× training throughput on typical chat datasets.
+- Quality > quantity. 10K carefully curated examples often beats 1M noisy ones. The LIMA paper (2023) showed 1K high-quality examples suffice for strong instruction-following.
+
+## What SFT actually is
+
+A pretrained LLM is a next-token autocompleter trained on web text. Give it `"The capital of France is"` and it predicts `"Paris"`. Give it `"What is the capital of France?"` and it might predict `"Many of you may not know..."` because the most likely continuation in its training data was a quiz, not an answer.
+
+SFT fixes that by training the model on (instruction, response) pairs and computing loss only on the response tokens. The model learns one thing: when the input ends with the assistant turn marker, generate a helpful answer.
+
+It is the mandatory first step. Every chatbot, coding assistant, and reasoning model goes through SFT before any preference alignment (DPO, RLHF) or RL (GRPO). Skip it and there is no policy to align — the base model just keeps autocompleting.
+
+## Mental model
+
+```mermaid
+flowchart LR
+  P["Pretrained\nmodel\n(autocompleter)"] -->|SFT on instruction pairs| S["SFT model\n(follows instructions)"]
+  S -->|DPO / RLHF| A["Aligned model\n(safe, helpful, honest)"]
+  S -->|GRPO / RL| R["Reasoning model\n(thinks step by step)"]
+```
+
+SFT is the bridge. Without it, preference alignment has nothing to align and RL has no base policy to improve.
+
+## Chat templates — the hidden contract
+
+The first place the abstraction leaks. Different model families wrap conversations in different special-token formats. Llama 3:
+
+```
+<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+You are a helpful assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+What is the capital of France?<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+The capital of France is Paris.<|eot_id|>
+```
+
+ChatML (Qwen, Mistral v0.3+):
+
+```
+<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+What is the capital of France?<|im_end|>
+<|im_start|>assistant
+The capital of France is Paris.<|im_end|>
+```
+
+The model learns one of these formats during pretraining or initial post-training. **The cardinal rule:** the template you train with must exactly match the template at inference. SFT with ChatML, serve with Llama 3 format, and the model sees gibberish where its turn markers should be.
+
+Always use the tokenizer's built-in helper:
+
+```python
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "What is the capital of France?"},
+    {"role": "assistant", "content": "The capital of France is Paris."},
+]
+text = tokenizer.apply_chat_template(messages, tokenize=False)
+```
+
+`apply_chat_template` reads the format off the model card. Every working SFT pipeline calls it. Every broken one rolled their own and got a typo.
+
+## Prompt loss masking
+
+The second place. Cross-entropy over a packed conversation, by default, computes a gradient for every token — system prompt, user question, chat-template scaffolding, assistant response. Three of those four are tokens the model will never have to generate at inference. The gradient updates flowing through them are wasted at best and actively harmful at worst (the model learns to parrot prompt patterns instead of answering them).
+
+The fix is one line:
+
+```python
+labels = input_ids.clone()
+for i, token_id in enumerate(input_ids):
+    if in_prompt_region(i):  # system + user turns
+        labels[i] = -100     # CrossEntropyLoss ignores -100
+```
+
+PyTorch's `CrossEntropyLoss` treats `-100` as "skip this position." The loss is now computed only on assistant tokens.
+
+In <Term name="trl">TRL</Term>, the standard library, this is handled when you pass structured `messages`:
+
+```python
+from trl import SFTTrainer, SFTConfig
+
+config = SFTConfig(
+    dataset_text_field="text",
+    max_seq_length=4096,
+    packing=True,                    # enable sample packing
+    dataset_kwargs={
+        "add_special_tokens": False, # template already has them
+    },
+)
+```
+
+If you build a custom training loop, you have to mask yourself. The number of "my SFT didn't work" debugging sessions that come down to forgetting this one step is non-trivial.
+
+## Sample packing
+
+The third place. Real chat datasets have wildly variable conversation lengths — 50 tokens, 4000 tokens, every length in between. Naive padding to `max_seq_length=4096` looks like this:
+
+```
+Seq 1: [tokens tokens tokens PAD PAD PAD PAD PAD PAD PAD]  ← 70% padding
+Seq 2: [tokens tokens PAD PAD PAD PAD PAD PAD PAD PAD PAD]  ← 80% padding
+Seq 3: [tokens tokens tokens tokens tokens PAD PAD PAD PAD]  ← 40% padding
+```
+
+You're paying the GPU to multiply zeros against zeros. Packing concatenates short conversations into one long sequence:
+
+```
+Packed: [seq1_tokens SEP seq2_tokens SEP seq3_tokens PAD]   ← 5% padding
+```
+
+The subtlety: you must block cross-attention between packed samples using `cu_seqlens` (FlashAttention's "cumulative sequence lengths") or a block-diagonal attention mask. Without it, sample 2 attends to sample 1's tokens — a silent data leak that you only notice when eval scores look weirdly good but the model behaves strangely on real inputs.
+
+Done correctly, packing gives **2–4× training throughput** on typical chat data.
+
+## The data quality ladder
+
+| Dataset size | Quality | Typical result |
+|---|---|---|
+| 1K curated (LIMA-style) | Expert-written, diverse | Strong instruction-following, sometimes brittle on edge cases |
+| 10K–50K (OpenHermes, Capybara) | Mix of synthetic + human | Good general-purpose chatbot |
+| 100K–500K (UltraChat, SlimOrca) | Mostly synthetic, filtered | Robust but can be generic |
+| 1M+ (WildChat, ShareGPT dumps) | Noisy, diverse | Volume helps coverage, but quality per-example is low |
+
+**2025–2026 consensus:** start with 10K–50K high-quality examples. Scale up only if evaluation shows coverage gaps. Synthetic data from frontier models (GPT-4o, Claude 3.5) is the most cost-effective source.
+
+## The training recipe
+
+Here's what those two `SFTTrainer` lines actually expand to:
+
+```python
+# Full SFT recipe for a 7B model on a single A100/H100
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from trl import SFTTrainer, SFTConfig
+from peft import LoraConfig
+
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-3.1-8B",
+    torch_dtype="bfloat16",
+    attn_implementation="flash_attention_2",
+)
+
+lora_config = LoraConfig(
+    r=16, lora_alpha=32,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                     "gate_proj", "up_proj", "down_proj"],
+    lora_dropout=0.05,
+    task_type="CAUSAL_LM",
+)
+
+config = SFTConfig(
+    output_dir="./sft-output",
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=4,   # effective bs = 16
+    learning_rate=2e-4,              # typical LoRA LR
+    num_train_epochs=3,
+    max_seq_length=4096,
+    packing=True,
+    bf16=True,
+    logging_steps=10,
+    save_strategy="epoch",
+)
+
+trainer = SFTTrainer(
+    model=model,
+    args=config,
+    train_dataset=dataset,           # HF dataset with "messages" column
+    peft_config=lora_config,
+)
+trainer.train()
+```
+
+Notice what's *not* in your code: the data collator that builds the masked-label tensors, the gradient accumulation that stages 4 micro-batches before each optimizer step, the bf16 autocast that decides which ops run in FP32 for stability, the <Term name="lora">LoRA</Term> wrapping that swaps every `nn.Linear` for a low-rank adapter, the FSDP/DDP shard-or-replicate decision (handled by `accelerate` if you launch with `accelerate launch`), the <Term name="flash attention">FlashAttention</Term> kernel that replaces the attention layer's `softmax(QKᵀ)·V` with a tiled, SMEM-staged version. All of that hangs off one method call.
+
+The Python you wrote is the slowest, most boring 1% of what's running on the GPUs. The other 99% is FlashAttention kernels, NCCL all-reduces, AdamW fused-update kernels — the things in the rest of this module.
+
+## Run it in your browser
+
+<RunInBrowser
+  description="See how chat templates transform raw messages into tokenized sequences."
+  code={`# Simulate chat template application (no GPU needed)
+def apply_chatml(messages):
+    """Apply ChatML template to a conversation."""
+    output = ""
+    for msg in messages:
+        output += f"<|im_start|>{msg['role']}\\n{msg['content']}<|im_end|>\\n"
+    return output
+
+def apply_llama3(messages):
+    """Apply Llama 3 template to a conversation."""
+    output = "<|begin_of_text|>"
+    for msg in messages:
+        output += f"<|start_header_id|>{msg['role']}<|end_header_id|>\\n\\n"
+        output += f"{msg['content']}<|eot_id|>"
+    return output
+
+messages = [
+    {"role": "system", "content": "You are a helpful coding assistant."},
+    {"role": "user", "content": "Write a Python function to compute fibonacci."},
+    {"role": "assistant", "content": "def fib(n):\\n    if n <= 1: return n\\n    return fib(n-1) + fib(n-2)"},
+]
+
+print("=== ChatML ===")
+print(apply_chatml(messages))
+print("\\n=== Llama 3 ===")
+print(apply_llama3(messages))
+print("\\n=== Token count comparison ===")
+chatml_tokens = len(apply_chatml(messages).split())
+llama3_tokens = len(apply_llama3(messages).split())
+print(f"ChatML:  ~{chatml_tokens} tokens")
+print(f"Llama 3: ~{llama3_tokens} tokens")
+print("\\nKey insight: different templates, same content.")
+print("Using the WRONG template at inference = broken model.")
+`}
+/>
+
+## Quick check
+
+<Quiz
+  question="You SFT a Llama 3 model but forget to apply prompt loss masking. What's the most likely consequence?"
+  options={[
+    'The model will refuse all instructions.',
+    'The model overfits to echoing the instruction format rather than generating useful responses, wasting gradient updates on prompt tokens.',
+    'Training will diverge and loss will explode.',
+    'No difference — loss masking is optional.',
+  ]}
+  answer={1}
+  explanation="Without prompt masking, the model spends gradient budget learning to predict instruction tokens it will never need to generate. This wastes capacity, can cause it to parrot prompt patterns, and typically results in worse response quality compared to masked training."
+/>
+
+## Key takeaways
+
+1. **SFT = teach the model to follow instructions.** It's the mandatory bridge between pretraining and alignment.
+2. **Chat template mismatch is the #1 SFT bug.** Always use `tokenizer.apply_chat_template()` — never format manually.
+3. **Mask prompt tokens** (`labels[prompt_indices] = -100`). The model should only learn to generate responses.
+4. **Sample packing gives 2–4× throughput** on typical chat data. Use it with proper attention masking to prevent cross-contamination.
+5. **Quality > quantity.** 10K expert examples beats 1M noisy ones. Start small, evaluate, scale if needed.
+
+## Go deeper
+
+<Resources
+  items={[
+    { kind: 'paper', href: 'https://arxiv.org/abs/2305.11206', title: 'LIMA: Less Is More for Alignment', author: 'Zhou et al. (Meta, 2023)', note: 'The landmark paper showing 1K examples can be enough. Changed the industry\'s data philosophy.' },
+    { kind: 'paper', href: 'https://arxiv.org/abs/2307.09288', title: 'Llama 2: Open Foundation and Fine-Tuned Chat Models', author: 'Touvron et al. (Meta, 2023)', note: 'Section 3 (SFT) is the canonical reference for the modern post-training pipeline — chat-formatted instruction data, prompt-masking, and the bridge from base model to chat-tuned.' },
+    { kind: 'blog', href: 'https://huggingface.co/docs/trl/sft_trainer', title: 'TRL SFTTrainer Documentation', author: 'Hugging Face', note: 'The standard library for SFT. Covers packing, masking, and all config options.' },
+    { kind: 'video', href: 'https://www.youtube.com/watch?v=quh7z1q7-uc', title: 'Sebastian Raschka — Finetuning LLMs with LoRA and QLoRA', author: 'Sebastian Raschka', note: 'Best visual walkthrough of the SFT + LoRA pipeline end-to-end.' },
+    { kind: 'blog', href: 'https://magazine.sebastianraschka.com/p/tips-for-llm-pretraining-and-evaluating', title: 'Tips for LLM Pretraining and Evaluating', author: 'Sebastian Raschka (2024)', note: 'Practical tips on data preparation and evaluation for SFT.' },
+    { kind: 'repo', href: 'https://github.com/huggingface/trl', title: 'huggingface/trl', note: 'Reference SFT implementation. The SFTTrainer class handles templates, packing, and masking.' },
+  ]}
+/>
+
+</Mode>
+
+<Mode is="reference">
 
 ## TL;DR
 
@@ -245,5 +515,7 @@ print("Using the WRONG template at inference = broken model.")
     { kind: 'repo', href: 'https://github.com/huggingface/trl', title: 'huggingface/trl', note: 'Reference SFT implementation. The SFTTrainer class handles templates, packing, and masking.' },
   ]}
 />
+
+</Mode>
 
 <LessonComplete />
