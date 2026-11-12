@@ -2,7 +2,7 @@
 
 A free, open-source course on **AI Systems, ML Compilers, Training, LLM Architecture, Applied AI, and Edge AI** — written densely, read on any device, runnable in the browser.
 
-**Live:** [lognjais.github.io/mosaic](https://lognjais.github.io/mosaic)
+**Live:** [jvoltci.github.io/mosaic](https://jvoltci.github.io/mosaic)
 
 ## What's here
 
